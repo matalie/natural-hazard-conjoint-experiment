@@ -1,0 +1,94 @@
+configfile: "config/config.yaml"
+
+CODING = config["conjoint"]["coding"]
+MODEL_RUNS = {
+    name: run
+    for name, run in config["models"]["runs"].items()
+    if run.get("enabled", True)
+}
+MODEL_NAMES = list(MODEL_RUNS)
+MODEL_OUTPUTS = expand("results/models/{run}.nc", run=MODEL_NAMES)
+PLOT_OUTPUTS = [
+    figure["output"]
+    for figure in config["plots"]["pre_post_distributions"]
+]
+HYPOTHESIS_PLOT_OUTPUTS = [
+    figure["output"]
+    for figure in config["plots"]["hypotheses"]
+]
+
+rule all:
+    input:
+        f"results/data/conjoint_{CODING}.parquet",
+        PLOT_OUTPUTS,
+        MODEL_OUTPUTS,
+        HYPOTHESIS_PLOT_OUTPUTS,
+
+rule preprocess:
+    input:
+        s0=config["data"]["raw"]["S0"],
+        s1=config["data"]["raw"]["S1"],
+        ids=config["data"]["id_mapping"]["path"],
+    output:
+        s0="results/data/waves/S0_clean.parquet",
+        s1="results/data/waves/S1_clean.parquet",
+        combined="results/data/combined_surveys.parquet",
+        analysis="results/data/analysis_sample.parquet",
+        conjoint=f"results/data/conjoint_{CODING}.parquet",
+    params:
+        skiprows=config["preprocessing"]["skiprows"],
+        preprocessing=config["preprocessing"],
+        acceptance=config["preprocessing"]["acceptance_consistency"],
+        id_mapping=config["data"]["id_mapping"],
+        analysis_items=config["analysis_items"],
+        conjoint=config["conjoint"],
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/preprocess.py"
+
+rule pre_post_distributions:
+    input:
+        analysis="results/data/analysis_sample.parquet",
+    output:
+        PLOT_OUTPUTS,
+    params:
+        figures=config["plots"]["pre_post_distributions"],
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/plot_distributions.py"
+
+rule fit_model:
+    input:
+        conjoint=f"results/data/conjoint_{CODING}.parquet",
+    output:
+        model="results/models/{run}.nc",
+    params:
+        run_name=lambda wildcards: wildcards.run,
+        run=lambda wildcards: MODEL_RUNS[wildcards.run],
+        samples=config["samples"],
+        constructs=config["constructs"],
+        conjoint=config["conjoint"],
+        sampling=config["sampling"],
+    threads:
+        config["sampling"]["cores"]
+    wildcard_constraints:
+        run="|".join(MODEL_NAMES)
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/fit_model.py"
+
+rule hypothesis_plots:
+    input:
+        model="results/models/main.nc"
+    output:
+        HYPOTHESIS_PLOT_OUTPUTS
+    params:
+        figures=config["plots"]["hypotheses"],
+        conjoint=config["conjoint"]
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/plot_hypotheses.py"

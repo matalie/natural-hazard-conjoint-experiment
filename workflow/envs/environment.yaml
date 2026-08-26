@@ -1,0 +1,20 @@
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  - python=3.12
+
+  - numpy
+  - pandas
+  - scipy
+  - pyarrow
+  - matplotlib
+
+  # Bayesian model stack
+  - pymc=5.28.5
+  - arviz=0.23.4
+  - pytensor<3
+
+  # Native C++ compiler for PyTensor on Windows
+  - gxx

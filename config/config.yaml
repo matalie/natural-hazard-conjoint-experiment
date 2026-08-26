@@ -1,0 +1,283 @@
+# DATA
+# ============================================================
+
+data:
+  raw:
+    S0: "resources/Survey_Adaptation Natural Hazards_First Wave_raw data.csv"
+    S1: "resources/Survey_Adaptation Natural Hazards_Second Wave_raw data.csv"
+  id_mapping:
+    path: "resources/id_list.csv"
+    sep: ";"
+    mapping_keys:
+      S0: "S0_idx"
+      S1: "S1_idx"
+    wave_keys:
+      S0: "id"
+      S1: "m"
+
+# PREPROCESSING
+# ============================================================
+
+preprocessing:
+  skiprows: [1, 2]
+  quality:
+    attention_column: "attention_check"
+    attention_valid_value: "Agree"
+    max_ids_per_ip: 2
+    straightliner_mode: "deservingness"
+  duration:
+    S0:
+      lower_quantile: 0.05
+      upper_quantile: 0.95
+    S1:
+      lower_quantile: 0.05
+      upper_quantile: null
+  imputation:
+    method: "median"
+    likert_min: 1
+    likert_max: 6
+    min_items:
+      sensitivity_nh: 2
+      psychological_distance: 2
+  acceptance_consistency:
+    max_inconsistent_tasks: 2
+
+# CONSTRUCT ITEMS
+# ============================================================
+
+analysis_items:
+  sensitivity_nh:
+    - "sensitivity_nh_1"
+    - "sensitivity_nh_2"
+    - "sensitivity_nh_3"
+  financial_vulnerability:
+    - "finan_vulnerability_1"
+  psychological_distance:
+    - "psycho_distance_1"
+    - "psycho_distance_2"
+    - "psycho_distance_4"
+
+# CONJOINT
+# ============================================================
+
+conjoint:
+  coding: "effect"   # effect | dummy
+  left_option: 1
+  right_option: 2
+  attributes:
+    costs:
+      baseline: "All people pay the same amount"
+      levels:
+        - "All people pay the same amount"
+        - "People pay proportionally to their income"
+        - "People & companies being protected by protective measures"
+        - "People pay proportionally to their CO2 emissions"
+        - "Companies pay proportionally to their CO2 emissions"
+    exemptions:
+      baseline: "No groups exempted from costs"
+      levels:
+        - "No groups exempted from costs"
+        - "Low-income earners exempted from costs"
+        - "Low- and middle-income earners exempted from costs"
+    benefits:
+      baseline: "Equal protection levels for all municipalities"
+      levels:
+        - "Equal protection levels for all municipalities"
+        - "Municipalities most affected by natural hazards even if they are economically declining"
+        - "Economically prosperous municipalities"
+        - "Municipalities in which people have lived in for many years should be protected at all costs"
+        - "Culturally valuable municipalities e.g. with historic buildings"
+  respondent_columns:
+    - "respondent_id"
+    # Demographics / subgroup analyses
+    - "S0_language_region"
+    - "S0_income"
+    - "S0_gender"
+    - "S0_age"
+    - "S0_education"
+    - "S0_party_choice"
+    - "S0_postal_code_1_TEXT"
+    # Robustness samples
+    - "all_acceptance_consistent"
+    - "n_acceptance_inconsistent"
+    # Variables required by the HCM
+    - "S0_sensitivity_nh_1"
+    - "S0_sensitivity_nh_2"
+    - "S0_sensitivity_nh_3"
+    - "S0_finan_vulnerability_1"
+    - "S1_sensitivity_nh_1"
+    - "S1_sensitivity_nh_2"
+    - "S1_sensitivity_nh_3"
+    - "S1_finan_vulnerability_1"
+    - "S1_psycho_distance_1"
+    - "S1_psycho_distance_2"
+    - "S1_psycho_distance_4"
+
+# MODEL VARIABLE MAPPING
+# ============================================================
+
+constructs:
+  natural_hazard_vulnerability:
+    - "S0_sensitivity_nh_1"
+    - "S0_sensitivity_nh_2"
+    - "S0_sensitivity_nh_3"
+
+  psychological_distance:
+    - "S1_psycho_distance_1"
+    - "S1_psycho_distance_2"
+    - "S1_psycho_distance_4"
+
+  financial_vulnerability: "S0_finan_vulnerability_1"
+
+# ROBUSTNESS SAMPLES
+# ============================================================
+
+samples:
+  full:
+    type: "full"
+
+  german:
+    type: "filter"
+    column: "S0_language_region"
+    operator: "equals"
+    value: "German-speaking region"
+
+  older_35:
+    type: "filter"
+    column: "S0_age"
+    operator: "not_equals"
+    value: "18 - 34"
+
+  high_income:
+    type: "filter"
+    column: "S0_income"
+    operator: "not_equals"
+    value: "Low"
+
+  acceptance_consistent:
+    type: "filter"
+    column: "all_acceptance_consistent"
+    operator: "is_true"
+
+  without_company:
+    type: "exclude_tasks"
+    conditions:
+      costs: "Companies pay proportionally to their CO2 emissions"
+      exemptions: "No groups exempted from costs"
+
+# SAMPLING
+# ============================================================
+sampling:
+  draws: 1500
+  tune: 1500
+  chains: 4
+  cores: 4
+
+# sampling:
+#   draws: 1500
+#   tune: 1500
+#   chains: 4
+#   cores: 1
+  random_seed: 123
+  target_accept: 0.95
+  progressbar: true
+  log_likelihood: true
+
+
+# MODEL RUNS
+# ============================================================
+models:
+  runs:
+
+    main:
+      enabled: true
+      sample: "full"
+      prior_factor: 2
+      include_financial_vulnerability: true
+
+    prior_factor_1:
+      enabled: false
+      sample: "full"
+      prior_factor: 1
+      include_financial_vulnerability: true
+
+    prior_factor_4:
+      enabled: false
+      sample: "full"
+      prior_factor: 4
+      include_financial_vulnerability: true
+
+    without_fv:
+      enabled: false
+      sample: "full"
+      prior_factor: 2
+      include_financial_vulnerability: false
+
+    german:
+      enabled: false
+      sample: "german"
+      prior_factor: 2
+      include_financial_vulnerability: true
+
+    older_35:
+      enabled: false
+      sample: "older_35"
+      prior_factor: 2
+      include_financial_vulnerability: true
+
+    high_income:
+      enabled: false
+      sample: "high_income"
+      prior_factor: 1
+      include_financial_vulnerability: true
+
+    acceptance_consistent:
+      enabled: false
+      sample: "acceptance_consistent"
+      prior_factor: 2
+      include_financial_vulnerability: true
+
+    without_company:
+      enabled: false
+      sample: "without_company"
+      prior_factor: 2
+      include_financial_vulnerability: true
+
+
+# FIGURES
+# ============================================================
+plots:
+  pre_post_distributions:
+
+    - output: "results/figures/distribution-climate-likert.png"
+      items:
+        - "climatechange_nh_1"
+        - "climatechange_nh_2"
+        - "climatechange_nh_3"
+      labels:
+        climatechange_nh_1: "In municipality"
+        climatechange_nh_2: "In canton"
+        climatechange_nh_3: "In Switzerland"
+
+    - output: "results/figures/distribution-nh-likert.png"
+      items:
+        - "sensitivity_nh_1"
+        - "sensitivity_nh_2"
+        - "sensitivity_nh_3"
+      labels:
+        sensitivity_nh_1: "Personally"
+        sensitivity_nh_2: "For family"
+        sensitivity_nh_3: "For municipality"
+        
+  hypotheses:
+    - hypothesis: "H1"
+      output: "results/figures/H1-pre-post-shift.png"
+
+    - hypothesis: "H2"
+      output: "results/figures/H2-psychological-distance.png"
+
+    - hypothesis: "H3"
+      output: "results/figures/H3-financial-vulnerability.png"
+
+    - hypothesis: "H4"
+      output: "results/figures/H4-vulnerability-heatmap.png"
