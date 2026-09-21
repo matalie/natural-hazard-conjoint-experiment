@@ -1,15 +1,23 @@
-"""Data cleaning, wave linking, conjoint reshaping, coding, and sample filters."""
+"""Legacy cleaning, item-wise imputation, choice design and sample filters.
 
+Source: prepare_data.ipynb and helpers/f_statistics.py in uploaded old repository.
+"""
 from __future__ import annotations
-
-from math import ceil
 import re
-
+import hashlib
 import numpy as np
 import pandas as pd
-
 from . import mappings as mp
 
+def _remove_bad_quality(df: pd.DataFrame) -> pd.DataFrame:
+    """prepare_data.ipynb cell 7: same three exclusion criteria as legacy."""
+    required = ["DistributionChannel", "Finished", "Q_TerminateFlag"]
+    missing = [c for c in required if c not in df]
+    if missing:
+        raise KeyError(f"Missing quality-control columns: {missing}")
+    mask = df["DistributionChannel"].ne("preview") & df["Finished"].ne(False)
+    mask &= ~df["Q_TerminateFlag"].isin(["PoorQuality", "NA", "QuotaMet", "Screened"])
+    return df.loc[mask].copy()
 
 def map_values(
     df: pd.DataFrame,
@@ -31,12 +39,13 @@ def map_values(
             out[col] = pd.to_numeric(out[col], errors="coerce")
     return out
 
-
 def _standardize_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy().replace("", pd.NA)
     out.columns = out.columns.str.replace(".", "", regex=False)
     out.columns = out.columns.str.replace("\xa0", "", regex=False)
     out.columns = out.columns.str.replace(r"\s+", "", regex=True)
+    if out.columns.duplicated().any():
+        raise ValueError("Column normalization produced duplicate names.")
     out.columns = [c.replace("municipality", "benefits") for c in out.columns]
     if "Duration(inseconds)" in out.columns:
         out = out.rename(columns={"Duration(inseconds)": "duration"})
@@ -45,43 +54,22 @@ def _standardize_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     return out
 
-
-def _as_finished(series: pd.Series) -> pd.Series:
-    """Robustly interpret Qualtrics Finished values as booleans."""
-    if pd.api.types.is_bool_dtype(series):
-        return series.fillna(False)
-    text = series.astype("string").str.strip().str.lower()
-    return text.isin({"true", "1", "yes"})
-
-
-def _remove_bad_quality(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    if "DistributionChannel" in out.columns:
-        out = out[out["DistributionChannel"] != "preview"]
-    if "Finished" in out.columns:
-        out = out[_as_finished(out["Finished"])]
-    if "Q_TerminateFlag" in out.columns:
-        out = out[~out["Q_TerminateFlag"].isin(["PoorQuality", "NA", "QuotaMet", "Screened"])]
-    return out.copy()
-
-
 def _duration_invalid_mask(
     df: pd.DataFrame,
     lower_quantile: float | None,
     upper_quantile: float | None,
 ) -> pd.Series:
     if "duration" not in df.columns:
-        return pd.Series(False, index=df.index)
+        raise KeyError("Missing survey duration column.")
 
     duration = pd.to_numeric(df["duration"], errors="coerce")
     valid = duration.dropna()
     if valid.empty:
-        return pd.Series(False, index=df.index)
+        return pd.Series(True, index=df.index)
 
     lower = valid.quantile(lower_quantile) if lower_quantile is not None else -np.inf
     upper = valid.quantile(upper_quantile) if upper_quantile is not None else np.inf
     return duration.le(lower) | duration.gt(upper) | duration.isna()
-
 
 def _straightliner_mask(df: pd.DataFrame, mode: str) -> pd.Series:
     groups = {
@@ -110,14 +98,12 @@ def _straightliner_mask(df: pd.DataFrame, mode: str) -> pd.Series:
         return result
     raise ValueError(f"Unknown straightliner mode: {mode}")
 
-
 def _remove_shared_ips(df: pd.DataFrame, max_ids_per_ip: int) -> pd.DataFrame:
     if "IPAddress" not in df.columns or "id" not in df.columns:
         return df.copy()
     counts = df.groupby("IPAddress")["id"].nunique()
     bad_ips = counts[counts > max_ids_per_ip].index
     return df.loc[~df["IPAddress"].isin(bad_ips)].copy()
-
 
 def _add_donation_dummies(df: pd.DataFrame) -> pd.DataFrame:
     if "solidarity_blatten" not in df.columns:
@@ -134,12 +120,10 @@ def _add_donation_dummies(df: pd.DataFrame) -> pd.DataFrame:
     ]
     return pd.concat([out, dummies], axis=1)
 
-
 def _drop_sensitive_columns(df: pd.DataFrame) -> pd.DataFrame:
     pattern = "|".join(map(re.escape, mp.ANONYMIZE_COLS))
     columns = df.filter(regex=pattern).columns
     return df.drop(columns=columns, errors="ignore")
-
 
 def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
     """Clean one raw survey wave using the logic from prepare_data.ipynb."""
@@ -156,6 +140,8 @@ def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
 
     attention_col = config["quality"]["attention_column"]
     attention_value = config["quality"]["attention_valid_value"]
+    if attention_col not in out:
+        raise KeyError(f"Missing attention-check column: {attention_col}")
     inattentive = (
         out[attention_col].ne(attention_value)
         if attention_col in out.columns
@@ -183,7 +169,6 @@ def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
     out = out.add_prefix(f"{wave}_")
     return out.reset_index(drop=True)
 
-
 def merge_waves(
     s0: pd.DataFrame,
     s1: pd.DataFrame,
@@ -207,14 +192,27 @@ def merge_waves(
             raise KeyError(f"Expected linking column '{column}' was not found.")
         frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("Int64")
 
+    keys = keys.dropna(subset=[key_s0, key_s1])
+    s0 = s0.dropna(subset=[wave_s0])
+    s1 = s1.dropna(subset=[wave_s1])
+
     merged = (
         keys.merge(s0, how="inner", left_on=key_s0, right_on=wave_s0)
         .merge(s1, how="inner", left_on=key_s1, right_on=wave_s1)
         .drop(columns=["S0_id", "S0_m", "S1_id", "S1_m"], errors="ignore")
     )
     merged = merged.drop_duplicates(subset=[key_s0, key_s1], keep="first").reset_index(drop=True)
-    merged["respondent_id"] = np.arange(1, len(merged) + 1)
+    # Legacy numbering retained unless a persistent pseudonymous ID is supplied.
+    id_col = config.get("respondent_id_column")
+    if id_col:
+        if id_col not in merged or merged[id_col].isna().any() or merged[id_col].duplicated().any():
+            raise ValueError("Configured respondent_id_column must be complete and unique.")
+        merged["respondent_id"] = merged[id_col].astype(str)
+    else:
+        merged["respondent_id"] = np.arange(1, len(merged) + 1)
 
+    merged["respondent_key"] = [hashlib.sha256(f"{a}|{b}".encode()).hexdigest()
+                                for a, b in zip(merged[key_s0], merged[key_s1])]
     merged = map_values(
         merged,
         mp.DEMOGRAPHICS_DICT,
@@ -237,100 +235,6 @@ def merge_waves(
     merged = map_values(merged, mp.CONVERSATIONS_MAP, [r"^S1_Q50"])
     return merged
 
-
-def _complete_construct_wave(
-    df: pd.DataFrame,
-    columns: list[str],
-    min_items: int,
-    method: str,
-    lo: int,
-    hi: int,
-) -> tuple[pd.DataFrame, pd.Series]:
-    """Complete one construct within one wave if enough items are observed."""
-
-    values = df[columns].apply(pd.to_numeric, errors="coerce")
-
-    # Keep only valid Likert values.
-    values = values.where(values.apply(lambda series: series.between(lo, hi)))
-    n_observed = values.notna().sum(axis=1)
-    usable = n_observed >= min_items
-
-    if method == "median":
-        center = values.median(axis=1)
-    elif method == "mean":
-        center = values.mean(axis=1)
-    else:
-        raise ValueError(f"Unknown imputation method: {method}")
-
-    center = np.floor(center + 0.5).clip(lo, hi)
-
-    # Only impute respondents for whom the construct is sufficiently observed.
-    values.loc[usable] = (values.loc[usable].T.fillna(center.loc[usable]).T)
-    return values, usable
-
-def _complete_construct_two_waves(
-    df: pd.DataFrame,
-    items: list[str],
-    min_items: int,
-    method: str,
-    lo: int,
-    hi: int,
-) -> tuple[pd.DataFrame, pd.Series]:
-    """Complete a construct within waves and fall back across waves."""
-    out = df.copy()
-
-    s0_cols = [f"S0_{item}" for item in items]
-    s1_cols = [f"S1_{item}" for item in items]
-
-    missing = [col for col in s0_cols + s1_cols if col not in out.columns]
-    if missing:
-        raise KeyError(f"Missing construct columns: {missing}")
-
-    s0_values, s0_usable = _complete_construct_wave(out, s0_cols, min_items=min_items, method=method, lo=lo, hi=hi,)
-    s1_values, s1_usable = _complete_construct_wave(out, s1_cols, min_items=min_items, method=method, lo=lo, hi=hi,)
-
-    # S0 insufficient, but S1 usable: use the completed S1 construct for S0.
-    use_s1_for_s0 = ~s0_usable & s1_usable
-    s0_values.loc[use_s1_for_s0] = (s1_values.loc[use_s1_for_s0].to_numpy())
-    # S1 insufficient, but S0 usable: use the completed S0 construct for S1.
-    use_s0_for_s1 = ~s1_usable & s0_usable
-    s1_values.loc[use_s0_for_s1] = (s0_values.loc[use_s0_for_s1].to_numpy())
-
-    out[s0_cols] = s0_values
-    out[s1_cols] = s1_values
-
-    # Respondent survives if at least one wave provides a usable version of the construct.
-    keep = s0_usable | s1_usable
-    return out, keep
-
-def _complete_single_item_two_waves(
-    df: pd.DataFrame,
-    item: str,
-    lo: int,
-    hi: int,
-) -> tuple[pd.DataFrame, pd.Series]:
-    """
-    Complete a single-item variable across S0 and S1.
-    If one wave is missing, use the other wave. If both waves are missing, exclude the respondent.
-    """
-    out = df.copy()
-
-    s0_col = f"S0_{item}"
-    s1_col = f"S1_{item}"
-
-    if s0_col not in out.columns or s1_col not in out.columns:
-        raise KeyError(f"Expected columns '{s0_col}' and '{s1_col}'.")
-
-    s0 = pd.to_numeric(out[s0_col], errors="coerce")
-    s1 = pd.to_numeric(out[s1_col], errors="coerce")
-    s0 = s0.where(s0.between(lo, hi))
-    s1 = s1.where(s1.between(lo, hi))
-    out[s0_col] = s0.fillna(s1)
-    out[s1_col] = s1.fillna(s0)
-
-    keep = (out[s0_col].notna() & out[s1_col].notna())
-    return out, keep
-
 def add_acceptance_consistency(df: pd.DataFrame, max_inconsistent: int) -> pd.DataFrame:
     """Reproduce the conjoint preference/acceptance consistency check from the notebook."""
     out = df.copy()
@@ -351,12 +255,12 @@ def add_acceptance_consistency(df: pd.DataFrame, max_inconsistent: int) -> pd.Da
         check_col = f"{prefix}_acceptance_consistent"
         out[check_col] = np.select(
             [
-                out[preference_col].eq("Option 1"),
-                out[preference_col].eq("Option 2"),
+                out[preference_col].eq("Option 1").fillna(False).to_numpy(dtype=bool),
+                out[preference_col].eq("Option 2").fillna(False).to_numpy(dtype=bool),
             ],
             [
-                out[acceptance_1].ge(out[acceptance_2]),
-                out[acceptance_2].ge(out[acceptance_1]),
+                out[acceptance_1].ge(out[acceptance_2]).fillna(False).to_numpy(dtype=bool),
+                out[acceptance_2].ge(out[acceptance_1]).fillna(False).to_numpy(dtype=bool),
             ],
             default=False,
         ).astype(bool)
@@ -372,191 +276,6 @@ def add_acceptance_consistency(df: pd.DataFrame, max_inconsistent: int) -> pd.Da
         out["all_acceptance_consistent"] = False
     return out
 
-
-def prepare_analysis_sample(
-    df: pd.DataFrame,
-    item_config: dict,
-    imputation_config: dict,
-    acceptance_config: dict,
-) -> pd.DataFrame:
-    """
-    Prepare the respondent sample used by the HCM.
-
-    Missing-data logic:
-    - Multi-item constructs require at least 2 observed items.
-    - Missing third items are completed within the same wave.
-    - If a wave is insufficient, use the construct from the other wave.
-    - Respondents are removed only if a required construct cannot be
-      formed from either wave.
-    """
-    out = df.copy()
-    method = imputation_config["method"]
-    lo = imputation_config["likert_min"]
-    hi = imputation_config["likert_max"]
-
-    # Natural-hazard vulnerability
-    nh_items = item_config["sensitivity_nh"]
-    nh_min_items = imputation_config["min_items"]["sensitivity_nh"]
-    out, keep_nh = _complete_construct_two_waves(out, items=nh_items, min_items=nh_min_items, method=method, lo=lo, hi=hi,)
-
-    # Financial vulnerability
-    fv_items = item_config["financial_vulnerability"]
-    if len(fv_items) != 1:
-        raise ValueError("financial_vulnerability is currently expected to contain exactly one item.")
-
-    out, keep_fv = _complete_single_item_two_waves(out, item=fv_items[0], lo=lo, hi=hi,)
-
-    # Psychological distance
-    # Currently this construct is only needed from S1. Require at least 2 of the 3 items.
-    pd_items = item_config["psychological_distance"]
-    pd_min_items = imputation_config["min_items"]["psychological_distance"]
-    
-    pd_columns = [f"S1_{item}" for item in pd_items]
-    missing_pd_columns = [col for col in pd_columns if col not in out.columns]
-    if missing_pd_columns:
-        raise KeyError(f"Missing psychological-distance columns: " f"{missing_pd_columns}")
-
-    pd_values, keep_pd = _complete_construct_wave(out, columns=pd_columns, min_items=pd_min_items, method=method, lo=lo, hi=hi,)
-    out[pd_columns] = pd_values
-
-    # Final HCM sample
-    keep = keep_nh & keep_fv & keep_pd
-    out = out.loc[keep].copy()
-
-    # Conjoint acceptance consistency
-    out = add_acceptance_consistency(out, max_inconsistent=acceptance_config["max_inconsistent_tasks"],)
-
-    # Blatten climate-change indicator
-    if "S1_climate_blatten" in out.columns:
-        out["blatten_cc"] = (
-            out["S1_climate_blatten"]
-            .astype("string")
-            .str.contains("climate change", case=False,na=False,)
-        )
-    return out.reset_index(drop=True)
-
-def _respondent_columns(df: pd.DataFrame, requested: list[str]) -> list[str]:
-    return [column for column in requested if column in df.columns]
-
-
-def build_conjoint_long(df: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """Transform the two-wave wide survey into one row per conjoint alternative."""
-    attribute_pattern = r"^S\d+_choice\d+_(costs|benefits|exemptions)\d+$"
-    choice_pattern = r"^S\d+_\d+_conjoint_prefer$"
-    attribute_columns = df.filter(regex=attribute_pattern).columns.tolist()
-    choice_columns = df.filter(regex=choice_pattern).columns.tolist()
-    if not attribute_columns:
-        raise ValueError("No conjoint attribute columns were found.")
-    if not choice_columns:
-        raise ValueError("No conjoint preference columns were found.")
-
-    respondent_columns = _respondent_columns(df, config["respondent_columns"])
-    if "respondent_id" not in respondent_columns:
-        respondent_columns = ["respondent_id"] + respondent_columns
-
-    attributes = df.melt(
-        id_vars=respondent_columns,
-        value_vars=attribute_columns,
-        var_name="var",
-        value_name="value",
-    )
-    attributes[["nh_event", "task", "attribute", "option"]] = attributes["var"].str.extract(
-        r"S(\d+)_choice(\d+)_(costs|benefits|exemptions)(\d+)"
-    )
-    for column in ["nh_event", "task", "option"]:
-        attributes[column] = attributes[column].astype(int)
-
-    options = (
-        attributes.pivot(
-            index=respondent_columns + ["nh_event", "task", "option"],
-            columns="attribute",
-            values="value",
-        )
-        .reset_index()
-        .copy()
-    )
-    options.columns.name = None
-
-    choices = df.melt(
-        id_vars=["respondent_id"],
-        value_vars=choice_columns,
-        var_name="preference_var",
-        value_name="choice",
-    )
-    choices["choice"] = choices["choice"].replace(mp.PREFERENCE_MAP)
-    choices["choice"] = pd.to_numeric(choices["choice"], errors="coerce")
-    choices[["nh_event", "task"]] = choices["preference_var"].str.extract(
-        r"S(\d+)_(\d+)_conjoint_prefer"
-    )
-    choices["nh_event"] = choices["nh_event"].astype(int)
-    choices["task"] = choices["task"].astype(int)
-    choices = choices[["respondent_id", "nh_event", "task", "choice"]]
-
-    out = options.merge(choices, on=["respondent_id", "nh_event", "task"], how="left")
-    out["chosen"] = out["choice"].eq(out["option"]).astype("int8")
-    out = out.drop(columns="choice")
-    out = out.sort_values(["respondent_id", "nh_event", "task", "option"]).reset_index(drop=True)
-    out["task_id"] = out.groupby(["respondent_id", "nh_event", "task"], sort=False).ngroup()
-
-    task_sizes = out.groupby("task_id").size()
-    if not task_sizes.eq(2).all():
-        bad = task_sizes[task_sizes.ne(2)].head().to_dict()
-        raise ValueError(f"Some conjoint tasks do not contain exactly two alternatives: {bad}")
-    chosen_counts = out.groupby("task_id")["chosen"].sum()
-    if not chosen_counts.eq(1).all():
-        bad = chosen_counts[chosen_counts.ne(1)].head().to_dict()
-        raise ValueError(f"Some conjoint tasks do not contain exactly one chosen alternative: {bad}")
-    return out
-
-
-def encode_conjoint(df: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """Add effect-coded or reference-dummy-coded design columns."""
-    coding = config["coding"]
-    if coding not in {"dummy", "effect"}:
-        raise ValueError("conjoint.coding must be 'dummy' or 'effect'.")
-
-    out = df.copy()
-    blocks: list[pd.DataFrame] = []
-    for attribute, specification in config["attributes"].items():
-        baseline = specification["baseline"]
-        levels = specification["levels"]
-        nonbaseline = [level for level in levels if level != baseline]
-
-        observed = set(out[attribute].dropna().unique())
-        unknown = observed.difference(levels)
-        if unknown:
-            raise ValueError(f"Unknown levels in {attribute}: {sorted(unknown)}")
-
-        block = pd.DataFrame(index=out.index)
-        for level in nonbaseline:
-            # Keep the old naming convention so later posterior code remains easy to migrate.
-            column = f"{attribute}_{level}"
-            if coding == "dummy":
-                block[column] = out[attribute].eq(level).astype("int8")
-            else:
-                block[column] = np.select(
-                    [out[attribute].eq(level), out[attribute].eq(baseline)],
-                    [1, -1],
-                    default=0,
-                ).astype("int8")
-        blocks.append(block)
-
-    return pd.concat([out] + blocks, axis=1)
-
-
-def design_columns(conjoint_config: dict) -> list[str]:
-    """Return encoded feature names in a stable, config-defined order."""
-    columns: list[str] = []
-    for attribute, specification in conjoint_config["attributes"].items():
-        baseline = specification["baseline"]
-        columns.extend(
-            f"{attribute}_{level}"
-            for level in specification["levels"]
-            if level != baseline
-        )
-    return columns
-
-
 def filter_model_sample(df: pd.DataFrame, sample_config: dict) -> pd.DataFrame:
     """Apply a respondent or task-level robustness-sample definition."""
     sample_type = sample_config["type"]
@@ -570,11 +289,11 @@ def filter_model_sample(df: pd.DataFrame, sample_config: dict) -> pd.DataFrame:
         if column not in out.columns:
             raise KeyError(f"Sample filter column '{column}' was not found in the conjoint data.")
         operator = sample_config["operator"]
-        value = sample_config["value"]
+        value = sample_config.get("value")
         if operator == "equals":
             return out.loc[out[column].eq(value)].copy()
         if operator == "not_equals":
-            return out.loc[out[column].ne(value)].copy()
+            return out.loc[out[column].ne(value).fillna(True)].copy()
         if operator == "is_true":
             return out.loc[out[column].fillna(False).astype(bool)].copy()
         raise ValueError(f"Unknown sample filter operator: {operator}")
@@ -590,3 +309,159 @@ def filter_model_sample(df: pd.DataFrame, sample_config: dict) -> pd.DataFrame:
         return out.loc[~out["task_id"].isin(task_ids)].copy()
 
     raise ValueError(f"Unknown sample type: {sample_type}")
+
+
+def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6):
+    """Legacy within-construct fill; an integer threshold avoids 0.67 rounding."""
+    columns = [prefix + item for item in items]
+    if not 1 <= min_items <= len(columns):
+        raise ValueError("min_items must be between 1 and the number of items.")
+    out = df.copy()
+    values = out[columns].apply(pd.to_numeric, errors="coerce")
+    values = values.where((values >= lo) & (values <= hi))
+    eligible = values.notna().sum(axis=1).ge(min_items)
+    if method not in {"median", "mean"}:
+        raise ValueError("Imputation method must be median or mean.")
+    center = getattr(values, method)(axis=1)
+    center = np.floor(center + 0.5).clip(lo, hi)  # legacy round-half-up
+    values.loc[eligible] = values.loc[eligible].T.fillna(center.loc[eligible]).T
+    out[columns] = values
+    return out
+
+
+def _fallback_between_waves(df, items, target, source, lo=1, hi=6):
+    """Legacy fallback_fill: fill only missing ITEMS, never overwrite observations."""
+    out = df.copy()
+    for item in items:
+        target_col, source_col = target + item, source + item
+        source_values = pd.to_numeric(out[source_col], errors="coerce")
+        source_values = source_values.where(source_values.between(lo, hi))
+        out[target_col] = pd.to_numeric(out[target_col], errors="coerce").fillna(source_values)
+    return out
+
+
+def prepare_analysis_sample(df, item_config, imputation_config, acceptance_config, *, return_audit=False):
+    """Exact legacy sequence (prepare_data.ipynb cells 18-22), per construct.
+
+    NHV/FV within S0 -> within S1 -> item-wise S1 to S0 -> S0 to S1;
+    PD within S1; finally complete cases on the original required items.
+    A one-item NHV response is NOT overwritten by the other wave.
+    """
+    out = df.copy()
+    lo, hi = imputation_config["likert_min"], imputation_config["likert_max"]
+    method = imputation_config["method"]
+    minimum = imputation_config["min_items"]
+    groups = {"sensitivity_nh": item_config["sensitivity_nh"],
+              "financial_vulnerability": item_config["financial_vulnerability"]}
+    main_items = [item for items in groups.values() for item in items]
+    pd_items = item_config["psychological_distance"]
+    required = ([prefix + item for prefix in ["S0_", "S1_"] for item in main_items]
+                + ["S1_" + item for item in pd_items])
+    missing = [c for c in required if c not in out]
+    if missing:
+        raise KeyError(f"Missing required construct columns: {missing}")
+    if out["respondent_id"].isna().any() or out["respondent_id"].duplicated().any():
+        raise ValueError("Analysis sample needs exactly one row per respondent_id.")
+
+    original = out[required].apply(pd.to_numeric, errors="coerce")
+    original = original.where((original >= lo) & (original <= hi))
+    for prefix in ["S0_", "S1_"]:
+        for name, items in groups.items():
+            threshold = minimum.get(name, 1 if len(items) == 1 else 2)
+            out = _fill_within_wave(out, items, prefix, threshold, method, lo, hi)
+    within = out[required].copy()
+    out = _fallback_between_waves(out, main_items, "S0_", "S1_", lo, hi)
+    out = _fallback_between_waves(out, main_items, "S1_", "S0_", lo, hi)
+    cross = out[required].copy()
+    out = _fill_within_wave(out, pd_items, "S1_", minimum["psychological_distance"], method, lo, hi)
+    keep = out[required].notna().all(axis=1)
+
+    audit = pd.DataFrame({"respondent_id": out["respondent_id"], "retained": keep})
+    audit["n_filled_within_main"] = (original.isna() & within.notna()).sum(axis=1)
+    audit["n_filled_cross_wave"] = (within.isna() & cross.notna()).sum(axis=1)
+    audit["n_filled_pd"] = (cross.isna() & out[required].notna()).sum(axis=1)
+    for name, items in groups.items():
+        cols = [prefix + item for prefix in ["S0_", "S1_"] for item in items]
+        audit[f"missing_{name}"] = out[cols].isna().any(axis=1)
+    audit["missing_psychological_distance"] = out[["S1_" + x for x in pd_items]].isna().any(axis=1)
+    # Full metadata table remains intact; only rows failing valid_cols are removed.
+    out = out.loc[keep].copy()
+    out = add_acceptance_consistency(out, acceptance_config["max_inconsistent_tasks"])
+    if "S1_climate_blatten" in out:
+        out["blatten_cc"] = out["S1_climate_blatten"].astype("string").str.contains("climate change", case=False, na=False)
+    out = out.reset_index(drop=True)
+    return (out, audit.reset_index(drop=True)) if return_audit else out
+
+
+def validate_choice_tasks(df, left_option=1, right_option=2):
+    if df.empty or left_option == right_option:
+        raise ValueError("Choice data are empty or option codes are identical.")
+    required = ["respondent_id", "task_id", "nh_event", "option", "chosen"]
+    if df[required].isna().any().any():
+        raise ValueError("Missing ID, wave, option or choice in conjoint data.")
+    groups = df.groupby("task_id", sort=False)
+    if not groups.size().eq(2).all() or not groups["option"].nunique().eq(2).all():
+        raise ValueError("Each task must have exactly two distinct alternatives.")
+    if not df["option"].isin([left_option, right_option]).all():
+        raise ValueError("Unexpected alternative code.")
+    if not df["chosen"].isin([0, 1]).all() or not groups["chosen"].sum().eq(1).all():
+        raise ValueError("Each task needs exactly one chosen alternative (0/1).")
+    if not groups[["respondent_id", "nh_event"]].nunique().eq(1).all().all():
+        raise ValueError("Both alternatives must belong to the same person and wave.")
+    if not df["nh_event"].isin([0, 1]).all():
+        raise ValueError("The current model expects S0=0 and S1=1.")
+
+
+def build_conjoint_long(df, config):
+    """Legacy wide-to-long design; join metadata AFTER reshaping, never drop missing demographics."""
+    if df["respondent_id"].isna().any() or df["respondent_id"].duplicated().any():
+        raise ValueError("One unique non-missing respondent_id per input row is required.")
+    attribute_columns = df.filter(regex=r"^S\d+_choice\d+_(costs|benefits|exemptions)\d+$").columns.tolist()
+    choice_columns = df.filter(regex=r"^S\d+_\d+_conjoint_prefer$").columns.tolist()
+    if not attribute_columns or not choice_columns:
+        raise ValueError("No conjoint attributes or choices found.")
+    attributes = df.melt(id_vars="respondent_id", value_vars=attribute_columns, var_name="var", value_name="value")
+    attributes[["nh_event", "task", "attribute", "option"]] = attributes["var"].str.extract(r"S(\d+)_choice(\d+)_(costs|benefits|exemptions)(\d+)")
+    attributes[["nh_event", "task", "option"]] = attributes[["nh_event", "task", "option"]].astype(int)
+    key = ["respondent_id", "nh_event", "task"]
+    options = attributes.pivot(index=key + ["option"], columns="attribute", values="value").reset_index()
+    options.columns.name = None
+    choices = df.melt(id_vars="respondent_id", value_vars=choice_columns, var_name="var", value_name="choice")
+    choices[["nh_event", "task"]] = choices["var"].str.extract(r"S(\d+)_(\d+)_conjoint_prefer").astype(int)
+    choices["choice"] = pd.to_numeric(choices["choice"].replace(mp.PREFERENCE_MAP), errors="coerce")
+    out = options.merge(choices[key + ["choice"]], on=key, how="left", validate="many_to_one")
+    out["chosen"] = out["choice"].eq(out["option"]).astype("int8")
+    out = out.drop(columns="choice").sort_values(key + ["option"]).reset_index(drop=True)
+    # Stable logical task key within the data version (rather than a positional index).
+    out["task_id"] = out[key].astype(str).agg("|".join, axis=1)
+    metadata = list(dict.fromkeys(["respondent_id"] + [c for c in config["respondent_columns"] if c in df]))
+    out = out.merge(df[metadata], on="respondent_id", how="left", validate="many_to_one")
+    validate_choice_tasks(out, config.get("left_option", 1), config.get("right_option", 2))
+    return out
+
+
+def design_columns(conjoint_config):
+    return [f"{attribute}_{level}" for attribute, spec in conjoint_config["attributes"].items()
+            for level in spec["levels"] if level != spec["baseline"]]
+
+
+def encode_conjoint(df, config):
+    """Fixed level order. Missing/unknown attributes are errors, not implicit baselines."""
+    coding = config["coding"]
+    if coding not in {"effect", "dummy"}:
+        raise ValueError("conjoint.coding must be effect or dummy.")
+    out = df.copy()
+    for attribute, spec in config["attributes"].items():
+        levels, baseline = spec["levels"], spec["baseline"]
+        if len(levels) < 2 or len(set(levels)) != len(levels) or baseline not in levels:
+            raise ValueError(f"Invalid level specification for {attribute}.")
+        if not out[attribute].isin(levels).all():
+            raise ValueError(f"Unknown or missing {attribute} levels: {out.loc[~out[attribute].isin(levels), attribute].unique()}")
+        for level in levels:
+            if level == baseline:
+                continue
+            values = out[attribute].eq(level).astype("int8")
+            if coding == "effect":
+                values = values - out[attribute].eq(baseline).astype("int8")
+            out[f"{attribute}_{level}"] = values
+    return out

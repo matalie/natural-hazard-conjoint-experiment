@@ -1,87 +1,134 @@
-"""Preparation and PyMC definitions for the final HCM and its adjusted variant."""
+"""Legacy HCM and two legacy choice baselines; no adjusted model.
 
+Model equations/prior scales are preserved. Coordinates and metadata are not
+statistical parameters. PyMC is imported only by builders, not by data preparation.
+"""
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
+import hashlib
+import json
 import numpy as np
 import pandas as pd
-import pymc as pm
-
-from .data_preparation import design_columns
-
-
-def _zscore_columns(values: np.ndarray) -> np.ndarray:
-    mean = np.nanmean(values, axis=0, keepdims=True)
-    sd = np.nanstd(values, axis=0, keepdims=True)
-    sd = np.where(sd == 0, 1.0, sd)
-    return (values - mean) / sd
+from .data_preparation import design_columns, validate_choice_tasks
+if TYPE_CHECKING:
+    import pymc as pm
 
 
-def prepare_model_data(df: pd.DataFrame, conjoint_config: dict, constructs: dict) -> dict:
-    """Convert encoded conjoint data into arrays for the PyMC model."""
+def _standardize(values):
+    values = np.asarray(values, dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("Non-finite construct values before standardization.")
+    mean, sd = values.mean(axis=0), values.std(axis=0, ddof=0)
+    scale = np.where(sd == 0, 1.0, sd)
+    return (values - mean) / scale, {"mean": np.asarray(mean).tolist(), "sd": np.asarray(scale).tolist()}
 
+
+def prepare_model_data(df, conjoint_config, constructs, *, include_constructs=True):
+    """Validated paired design, true IDs, and within-run legacy z-standardization."""
+    left_code, right_code = conjoint_config.get("left_option", 1), conjoint_config.get("right_option", 2)
+    validate_choice_tasks(df, left_code, right_code)
     features = design_columns(conjoint_config)
     ordered = df.sort_values(["task_id", "option"]).copy()
-
-    if not ordered.groupby("task_id").size().eq(2).all():
-        raise ValueError("Each task must contain two alternatives.")
-    if not ordered.groupby("task_id")["chosen"].sum().eq(1).all():
-        raise ValueError("Each task must contain one chosen alternative.")
-
-    left_option = conjoint_config.get("left_option", 1)
-    right_option = conjoint_config.get("right_option", 2)
-
-    left = ordered["option"].eq(left_option)
-    right = ordered["option"].eq(right_option)
-
-    if not np.array_equal(ordered.loc[left, "task_id"].to_numpy(), ordered.loc[right, "task_id"].to_numpy(),):
-        raise ValueError("Left and right alternatives are not aligned.")
-
-    x_left = ordered.loc[left, features].to_numpy(float)
-    x_right = ordered.loc[right, features].to_numpy(float)
-    y_left = ordered.loc[left, "chosen"].to_numpy(int)
-    event = ordered.loc[left, "nh_event"].to_numpy(int)
-
-    respondent_index, respondent_ids = pd.factorize(ordered.loc[left, "respondent_id"], sort=False)
-
-    nhv_columns = constructs["natural_hazard_vulnerability"]
-    pd_columns = constructs["psychological_distance"]
-    fv_column = constructs["financial_vulnerability"]
-
-    respondent_level = (
-        ordered[["respondent_id", *nhv_columns, *pd_columns, fv_column]]
-        .drop_duplicates("respondent_id")
-        .set_index("respondent_id")
-        .reindex(respondent_ids)
-    )
-
-    y_nhv = respondent_level[nhv_columns].to_numpy(float)
-    y_pd = respondent_level[pd_columns].to_numpy(float)
-    fv = respondent_level[fv_column].to_numpy(float)
-
-    fv_sd = fv.std(ddof=0)
-
-    return {
-        "feature_names": features,
-        "nhv_item_names": nhv_columns,
-        "pd_item_names": pd_columns,
-        "n_respondents": len(respondent_ids),
-        "x_left": x_left,
-        "x_right": x_right,
-        "y_left": y_left,
-        "event": event,
-        "respondent_index": respondent_index,
-        "y_nhv_z": _zscore_columns(y_nhv),
-        "y_pd_z": _zscore_columns(y_pd),
-        "fv_z": (fv - fv.mean()) / (fv_sd if fv_sd else 1.0),
+    left = ordered.loc[ordered["option"].eq(left_code)].copy()
+    right = ordered.loc[ordered["option"].eq(right_code)].copy()
+    if not np.array_equal(left["task_id"], right["task_id"]):
+        raise ValueError("Left/right tasks are not aligned.")
+    ridx, rids = pd.factorize(left["respondent_id"], sort=False)
+    result = {
+        "feature_names": features, "task_ids": left["task_id"].astype(str).to_numpy(),
+        "respondent_ids": rids.to_numpy(), "n_respondents": len(rids),
+        "respondent_index": ridx.astype("int64"),
+        "x_left": left[features].to_numpy(float), "x_right": right[features].to_numpy(float),
+        "y_left": left["chosen"].to_numpy("int64"), "event": left["nh_event"].to_numpy("int64"),
     }
+    if not np.isfinite(result["x_left"]).all() or not np.isfinite(result["x_right"]).all():
+        raise ValueError("Non-finite encoded features.")
+    # Persistent linking fingerprint avoids unsafe demographic joins after refiltering.
+    if "respondent_key" in ordered:
+        if not ordered.groupby("respondent_id")["respondent_key"].nunique().eq(1).all():
+            raise ValueError("Inconsistent respondent linking keys.")
+        result["respondent_keys"] = (ordered.drop_duplicates("respondent_id").set_index("respondent_id")
+                                     .loc[rids, "respondent_key"].astype(str).to_numpy())
+    else:
+        raise KeyError("respondent_key missing: rebuild data with the supplied preprocessing.")
+
+    if include_constructs:
+        nh, psy, fv = (constructs[k] for k in ["natural_hazard_vulnerability", "psychological_distance", "financial_vulnerability"])
+        columns = list(dict.fromkeys([*nh, *psy, fv]))
+        if not ordered.groupby("respondent_id")[columns].nunique(dropna=False).eq(1).all().all():
+            raise ValueError("Construct values differ across rows of the same respondent.")
+        respondents = ordered.drop_duplicates("respondent_id").set_index("respondent_id").loc[rids, columns]
+        result["y_nhv_z"], nh_scale = _standardize(respondents[nh].to_numpy(float))
+        result["y_pd_z"], pd_scale = _standardize(respondents[psy].to_numpy(float))
+        result["fv_z"], fv_scale = _standardize(respondents[fv].to_numpy(float))
+        result["nhv_item_names"], result["pd_item_names"] = nh, psy
+        result["standardization"] = {"nhv": {"columns": nh, **nh_scale},
+                                     "pd": {"columns": psy, **pd_scale},
+                                     "fv": {"column": fv, **fv_scale}}
+    else:
+        result["standardization"] = {}
+    return result
+
+
+def choice_signature(data):
+    """Hash observations/design for strict within-observation model comparisons."""
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"task_ids": data["task_ids"].tolist(), "features": data["feature_names"],
+                              "respondent_keys": data["respondent_keys"].tolist()}, sort_keys=True).encode())
+    for name in ["x_left", "x_right", "y_left", "event", "respondent_index"]:
+        arr = np.asarray(data[name], dtype="<f8")
+        digest.update(str(arr.shape).encode()); digest.update(arr.tobytes())
+    return digest.hexdigest()
+
+
+
+def build_simple_choice_model(data) -> pm.Model:
+    """Test first simple model with parameters alpha (left bias) and a common partworth mean (utility of an option) without event shift."""
+    import pymc as pm
+    coords = {"level": data["feature_names"], "task": data["task_ids"]}
+    with pm.Model(coords=coords) as model:
+        left = pm.Data("x_left", data["x_left"], dims=("task", "level"))
+        right = pm.Data("x_right", data["x_right"], dims=("task", "level"))
+        observed = pm.Data("choice_left", data["y_left"], dims="task")
+        alpha = pm.Normal("alpha", 0, 0.3)
+        beta = pm.Normal("partworth_mean", 0, 0.5, dims="level")
+        logit = pm.Deterministic("logit_p_left", alpha + pm.math.sum((left-right)*beta, axis=1), dims="task")
+        pm.Bernoulli("choice", logit_p=logit, observed=observed, dims="task")
+    return model
+
+
+def build_longitudinal_mixed_logit(data) -> pm.Model:
+    """Test simple longitudinal choice model with alpha (left bias) and a partworth mean value as well as an individual partworth preference (utility of an option), and a common partworth shift (utility shift)."""
+    import pymc as pm
+    coords = {"level": data["feature_names"], "task": data["task_ids"], "respondent": data["respondent_ids"]}
+    with pm.Model(coords=coords) as model:
+        left = pm.Data("x_left", data["x_left"], dims=("task", "level"))
+        right = pm.Data("x_right", data["x_right"], dims=("task", "level"))
+        observed = pm.Data("choice_left", data["y_left"], dims="task")
+        event = pm.Data("event", data["event"], dims="task")
+        ridx = pm.Data("respondent_index", data["respondent_index"], dims="task")
+        alpha = pm.Normal("alpha", 0, 0.3)
+        beta = pm.Normal("partworth_mean", 0, 0.5, dims="level")
+        sd = pm.HalfNormal("partworth_sd", 0.5, dims="level")
+        z = pm.Normal("partworth_z", 0, 0.3, dims=("respondent", "level"))
+        individual = pm.Deterministic("partworth_individual", beta + z*sd, dims=("respondent", "level"))
+        shift = pm.Normal("shift", 0, 0.5, dims="level")
+        effective = individual[ridx] + shift * event[:, None]
+        logit = pm.Deterministic("logit_p_left", alpha + pm.math.sum((left-right)*effective, axis=1), dims="task")
+        pm.Bernoulli("choice", logit_p=logit, observed=observed, dims="task")
+        pm.Deterministic("partworth_post", beta + shift, dims="level")
+    return model
 
 
 def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: bool) -> pm.Model:
     """Final 'easy factor' HCM consolidated from the duplicated complete-HCM notebooks."""
+    import pymc as pm
+    if not np.isfinite(prior_factor) or prior_factor <= 0:
+        raise ValueError("prior_factor must be positive and finite.")
     coords = {
-        "task": np.arange(data["x_left"].shape[0]),
+        "task": data["task_ids"],
         "level": data["feature_names"],
-        "respondent": np.arange(data["n_respondents"]),
+        "respondent": data["respondent_ids"],
         "nhv_item": data["nhv_item_names"],
         "pd_item": data["pd_item_names"],
     }
@@ -175,3 +222,5 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
         pm.Deterministic("partworth_post_mean", partworth_mean + shift_mean, dims="level")
 
     return model
+
+

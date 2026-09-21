@@ -1,68 +1,57 @@
+"""Three coarse preprocessing stages; no notebooks, no sampling."""
 from pathlib import Path
 import sys
-from typing import TYPE_CHECKING
-
+import json
+import hashlib
 import pandas as pd
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from natural_hazard_solidarity.data_preparation import (clean_wave, merge_waves, prepare_analysis_sample,
+                                                      build_conjoint_long, encode_conjoint)
 
-if TYPE_CHECKING:
-    from snakemake.iocontainers import snakemake
 
-# Snakemake executes scripts from a temporary location. scriptdir points to the
-# original workflow/scripts directory, so this makes src/ importable without
-# requiring an editable package installation inside every Conda environment.
-REPO_ROOT = Path(snakemake.scriptdir).parents[1]
-sys.path.insert(0, str(REPO_ROOT / "src"))
+def save(frame, path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(path, index=False)
 
-from natural_hazard_solidarity.data_preparation import (  # noqa: E402
-    build_conjoint_long,
-    clean_wave,
-    encode_conjoint,
-    merge_waves,
-    prepare_analysis_sample,
-)
 
-def save_parquet(frame: pd.DataFrame, path: str) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(target, index=False)
+def main(s):
+    stage = s.params.stage
+    if stage == "clean":
+        waves = {}
+        for wave, path in [("S0", s.input.s0), ("S1", s.input.s1)]:
+            raw = pd.read_csv(path, skiprows=s.params.preprocessing["skiprows"], dtype={"id": "string"},
+                              sep=s.params.preprocessing.get("csv_sep", ","))
+            waves[wave] = clean_wave(raw, wave, s.params.preprocessing)
+        ids = pd.read_csv(s.input.ids, sep=s.params.id_mapping["sep"])
+        combined = merge_waves(waves["S0"], waves["S1"], ids, s.params.id_mapping)
+        save(waves["S0"], s.output.s0); save(waves["S1"], s.output.s1); save(combined, s.output.combined)
+        report = {"S0_clean": len(waves["S0"]), "S1_clean": len(waves["S1"]), "linked": len(combined),
+                  "raw_sha256": {wave: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                                 for wave, path in [("S0", s.input.s0), ("S1", s.input.s1)]}}
+        Path(s.output.report).parent.mkdir(parents=True, exist_ok=True)
+        Path(s.output.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(report)
+    elif stage == "sample":
+        combined = pd.read_parquet(s.input.combined)
+        analysis, audit = prepare_analysis_sample(
+            combined,
+            s.params.analysis_items,
+            s.params.imputation,
+            s.params.acceptance,
+            return_audit=True,
+        )
+        save(analysis, s.output.analysis)
+        Path(s.output.audit).parent.mkdir(parents=True, exist_ok=True)
+        audit.to_csv(s.output.audit, index=False)
+        print(f"Linked={len(combined)}, retained={len(analysis)}, excluded={len(combined)-len(analysis)}")
+    elif stage == "conjoint":
+        analysis = pd.read_parquet(s.input.analysis)
+        result = encode_conjoint(build_conjoint_long(analysis, s.params.conjoint), s.params.conjoint)
+        save(result, s.output.conjoint)
+        print(f"Conjoint: {result.respondent_id.nunique()} respondents, {result.task_id.nunique()} tasks, {len(result)} alternatives")
+    else:
+        raise ValueError(f"Unknown preprocessing stage: {stage}")
 
-raw_s0 = pd.read_csv(
-    snakemake.input.s0,
-    dtype={"id": "string"},
-    skiprows=snakemake.params.skiprows,
-)
-raw_s1 = pd.read_csv(
-    snakemake.input.s1,
-    dtype={"id": "string"},
-    skiprows=snakemake.params.skiprows,
-)
 
-s0 = clean_wave(raw_s0, wave="S0", config=snakemake.params.preprocessing)
-s1 = clean_wave(raw_s1, wave="S1", config=snakemake.params.preprocessing)
-save_parquet(s0, snakemake.output.s0)
-save_parquet(s1, snakemake.output.s1)
-
-keys = pd.read_csv(
-    snakemake.input.ids,
-    sep=snakemake.params.id_mapping["sep"],
-)
-combined = merge_waves(s0, s1, keys, config=snakemake.params.id_mapping)
-save_parquet(combined, snakemake.output.combined)
-
-analysis_sample = prepare_analysis_sample(
-    combined,
-    item_config=snakemake.params.analysis_items,
-    imputation_config=snakemake.params.preprocessing["imputation"],
-    acceptance_config=snakemake.params.acceptance,
-)
-save_parquet(analysis_sample, snakemake.output.analysis)
-
-conjoint = build_conjoint_long(analysis_sample, config=snakemake.params.conjoint)
-conjoint = encode_conjoint(conjoint, config=snakemake.params.conjoint)
-save_parquet(conjoint, snakemake.output.conjoint)
-
-print(
-    "Preprocessing finished: "
-    f"S0={len(s0)}, S1={len(s1)}, linked respondents={len(analysis_sample)}, "
-    f"conjoint rows={len(conjoint)}"
-)
+if __name__ == "__main__":
+    main(globals()["snakemake"])

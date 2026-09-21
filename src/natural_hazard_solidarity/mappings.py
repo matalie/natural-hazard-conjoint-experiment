@@ -1,4 +1,4 @@
-"""Mappings copied from the old repository; no file I/O in this module."""
+"""Survey mappings from legacy helpers/map_data.py; no import-time file IO."""
 import numpy as np
 
 VALID_COLUMNS = [
@@ -19,7 +19,6 @@ NUM_COLUMNS = [
     "number_household_1_TEXT"
 ]
 
-# Likert scale responses to be transfomred into a numberic value (from Veronikas code in R)
 LIKERT_MAP = {
     "1 - Extremely unlikely": 1,
     "1 - No trust at all": 1,
@@ -79,7 +78,6 @@ CONVERSATIONS_MAP = {
     np.nan: np.nan
 }
 
-# Translation mapping of the demographic replies in the survey to have a matching range as the BSF (Bundesamt für Statistik, 2024) (from Veronikas code in R)
 DEMOGRAPHICS_DICT = {
     # gender
     "Female": "Female",
@@ -146,7 +144,6 @@ DEMOGRAPHICS_DICT = {
     "Prefer not to say": np.nan,
 }
 
-# Translation mapping of the different choice experiment answers to english (from Veronikas code in R)
 TRANSLATION_DICT = {
     # Costs
     "Tous les citoyens paient le même montant": "All people pay the same amount",
@@ -209,7 +206,6 @@ ANONYMIZE_COLS = ['Status', 'IPAddress', 'RecipientLastName','RecipientFirstName
                 , 'DistributionChannel', 'UserLanguage', r'language$', 'RecordedDate', 'ResponseId']
 
 PREFERENCE_MAP = {"Option 1": 1, "Option 2": 2}
-
 
 DONATIONS = [
     "I have donated money to support people in Blatten.",

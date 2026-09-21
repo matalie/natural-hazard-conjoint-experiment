@@ -1,1 +1,2 @@
-"""Reusable code for the natural-hazard solidarity workflow."""
+"""Natural hazard solidarity analysis. See docs/MIGRATION.md."""
+__version__ = "0.2.0"

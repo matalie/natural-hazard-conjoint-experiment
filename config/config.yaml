@@ -1,30 +1,30 @@
-# DATA
-# ============================================================
-
+# Reference migration v2. Outputs are isolated from old results by default.
+# Legacy within-wave + ITEM-wise cross-wave imputation. No adjusted HCM.
+project:
+  output_root: results
 data:
   raw:
-    S0: "resources/Survey_Adaptation Natural Hazards_First Wave_raw data.csv"
-    S1: "resources/Survey_Adaptation Natural Hazards_Second Wave_raw data.csv"
+    S0: resources/Survey_Adaptation Natural Hazards_First Wave_raw data.csv
+    S1: resources/Survey_Adaptation Natural Hazards_Second Wave_raw data.csv
   id_mapping:
-    path: "resources/id_list.csv"
-    sep: ";"
+    path: resources/id_list.csv
+    sep: ;
     mapping_keys:
-      S0: "S0_idx"
-      S1: "S1_idx"
+      S0: S0_idx
+      S1: S1_idx
     wave_keys:
-      S0: "id"
-      S1: "m"
-
-# PREPROCESSING
-# ============================================================
-
+      S0: id
+      S1: m
+    respondent_id_column: null
 preprocessing:
-  skiprows: [1, 2]
+  skiprows:
+  - 1
+  - 2
   quality:
-    attention_column: "attention_check"
-    attention_valid_value: "Agree"
+    attention_column: attention_check
+    attention_valid_value: Agree
     max_ids_per_ip: 2
-    straightliner_mode: "deservingness"
+    straightliner_mode: deservingness
   duration:
     S0:
       lower_quantile: 0.05
@@ -33,251 +33,457 @@ preprocessing:
       lower_quantile: 0.05
       upper_quantile: null
   imputation:
-    method: "median"
+    method: median
     likert_min: 1
     likert_max: 6
     min_items:
       sensitivity_nh: 2
       psychological_distance: 2
+      financial_vulnerability: 1
   acceptance_consistency:
     max_inconsistent_tasks: 2
-
-# CONSTRUCT ITEMS
-# ============================================================
-
 analysis_items:
   sensitivity_nh:
-    - "sensitivity_nh_1"
-    - "sensitivity_nh_2"
-    - "sensitivity_nh_3"
+  - sensitivity_nh_1
+  - sensitivity_nh_2
+  - sensitivity_nh_3
   financial_vulnerability:
-    - "finan_vulnerability_1"
+  - finan_vulnerability_1
   psychological_distance:
-    - "psycho_distance_1"
-    - "psycho_distance_2"
-    - "psycho_distance_4"
-
-# CONJOINT
-# ============================================================
-
+  - psycho_distance_1
+  - psycho_distance_2
+  - psycho_distance_4
 conjoint:
-  coding: "effect"   # effect | dummy
+  coding: effect
   left_option: 1
   right_option: 2
   attributes:
     costs:
-      baseline: "All people pay the same amount"
+      baseline: All people pay the same amount
       levels:
-        - "All people pay the same amount"
-        - "People pay proportionally to their income"
-        - "People & companies being protected by protective measures"
-        - "People pay proportionally to their CO2 emissions"
-        - "Companies pay proportionally to their CO2 emissions"
+      - All people pay the same amount
+      - People pay proportionally to their income
+      - People & companies being protected by protective measures
+      - People pay proportionally to their CO2 emissions
+      - Companies pay proportionally to their CO2 emissions
     exemptions:
-      baseline: "No groups exempted from costs"
+      baseline: No groups exempted from costs
       levels:
-        - "No groups exempted from costs"
-        - "Low-income earners exempted from costs"
-        - "Low- and middle-income earners exempted from costs"
+      - No groups exempted from costs
+      - Low-income earners exempted from costs
+      - Low- and middle-income earners exempted from costs
     benefits:
-      baseline: "Equal protection levels for all municipalities"
+      baseline: Equal protection levels for all municipalities
       levels:
-        - "Equal protection levels for all municipalities"
-        - "Municipalities most affected by natural hazards even if they are economically declining"
-        - "Economically prosperous municipalities"
-        - "Municipalities in which people have lived in for many years should be protected at all costs"
-        - "Culturally valuable municipalities e.g. with historic buildings"
+      - Equal protection levels for all municipalities
+      - Municipalities most affected by natural hazards even if they are economically declining
+      - Economically prosperous municipalities
+      - Municipalities in which people have lived in for many years should be protected at all costs
+      - Culturally valuable municipalities e.g. with historic buildings
   respondent_columns:
-    - "respondent_id"
-    # Demographics / subgroup analyses
-    - "S0_language_region"
-    - "S0_income"
-    - "S0_gender"
-    - "S0_age"
-    - "S0_education"
-    - "S0_party_choice"
-    - "S0_postal_code_1_TEXT"
-    # Robustness samples
-    - "all_acceptance_consistent"
-    - "n_acceptance_inconsistent"
-    # Variables required by the HCM
-    - "S0_sensitivity_nh_1"
-    - "S0_sensitivity_nh_2"
-    - "S0_sensitivity_nh_3"
-    - "S0_finan_vulnerability_1"
-    - "S1_sensitivity_nh_1"
-    - "S1_sensitivity_nh_2"
-    - "S1_sensitivity_nh_3"
-    - "S1_finan_vulnerability_1"
-    - "S1_psycho_distance_1"
-    - "S1_psycho_distance_2"
-    - "S1_psycho_distance_4"
-
-# MODEL VARIABLE MAPPING
-# ============================================================
-
+  - respondent_id
+  - respondent_key
+  - S0_language_region
+  - S0_age
+  - S0_gender
+  - S0_income
+  - S0_education
+  - S0_party_choice
+  - all_acceptance_consistent
+  - n_acceptance_inconsistent
+  - S0_sensitivity_nh_1
+  - S0_sensitivity_nh_2
+  - S0_sensitivity_nh_3
+  - S0_finan_vulnerability_1
+  - S1_sensitivity_nh_1
+  - S1_sensitivity_nh_2
+  - S1_sensitivity_nh_3
+  - S1_finan_vulnerability_1
+  - S1_psycho_distance_1
+  - S1_psycho_distance_2
+  - S1_psycho_distance_4
 constructs:
   natural_hazard_vulnerability:
-    - "S0_sensitivity_nh_1"
-    - "S0_sensitivity_nh_2"
-    - "S0_sensitivity_nh_3"
-
+  - S0_sensitivity_nh_1
+  - S0_sensitivity_nh_2
+  - S0_sensitivity_nh_3
   psychological_distance:
-    - "S1_psycho_distance_1"
-    - "S1_psycho_distance_2"
-    - "S1_psycho_distance_4"
-
-  financial_vulnerability: "S0_finan_vulnerability_1"
-
-# ROBUSTNESS SAMPLES
-# ============================================================
-
+  - S1_psycho_distance_1
+  - S1_psycho_distance_2
+  - S1_psycho_distance_4
+  financial_vulnerability: S0_finan_vulnerability_1
 samples:
   full:
-    type: "full"
-
+    type: full
   german:
-    type: "filter"
-    column: "S0_language_region"
-    operator: "equals"
-    value: "German-speaking region"
-
+    type: filter
+    column: S0_language_region
+    operator: equals
+    value: German-speaking region
   older_35:
-    type: "filter"
-    column: "S0_age"
-    operator: "not_equals"
-    value: "18 - 34"
-
+    type: filter
+    column: S0_age
+    operator: not_equals
+    value: 18 - 34
   high_income:
-    type: "filter"
-    column: "S0_income"
-    operator: "not_equals"
-    value: "Low"
-
+    type: filter
+    column: S0_income
+    operator: not_equals
+    value: Low
   acceptance_consistent:
-    type: "filter"
-    column: "all_acceptance_consistent"
-    operator: "is_true"
-
-  without_company:
-    type: "exclude_tasks"
+    type: filter
+    column: all_acceptance_consistent
+    operator: is_true
+  without_company_pay_prop:
+    type: exclude_tasks
     conditions:
-      costs: "Companies pay proportionally to their CO2 emissions"
-      exemptions: "No groups exempted from costs"
-
-# SAMPLING
-# ============================================================
+      costs: Companies pay proportionally to their CO2 emissions
+      exemptions: No groups exempted from costs
 sampling:
   draws: 1500
   tune: 1500
   chains: 4
-  cores: 4
-
-# sampling:
-#   draws: 1500
-#   tune: 1500
-#   chains: 4
-#   cores: 1
+  cores: 2
+  blas_threads_per_chain: 1
   random_seed: 123
   target_accept: 0.95
   progressbar: true
   log_likelihood: true
-
-
-# MODEL RUNS
-# ============================================================
 models:
+  default_runs:
+  - main
   runs:
-
     main:
-      enabled: true
-      sample: "full"
+      sample: full
       prior_factor: 2
       include_financial_vulnerability: true
-
     prior_factor_1:
-      enabled: false
-      sample: "full"
+      sample: full
       prior_factor: 1
       include_financial_vulnerability: true
-
     prior_factor_4:
-      enabled: false
-      sample: "full"
+      sample: full
       prior_factor: 4
       include_financial_vulnerability: true
-
     without_fv:
-      enabled: false
-      sample: "full"
+      sample: full
       prior_factor: 2
       include_financial_vulnerability: false
-
     german:
-      enabled: false
-      sample: "german"
+      sample: german
       prior_factor: 2
       include_financial_vulnerability: true
-
     older_35:
-      enabled: false
-      sample: "older_35"
+      sample: older_35
       prior_factor: 2
       include_financial_vulnerability: true
-
-    high_income:
-      enabled: false
-      sample: "high_income"
-      prior_factor: 1
-      include_financial_vulnerability: true
-
     acceptance_consistent:
-      enabled: false
-      sample: "acceptance_consistent"
+      sample: acceptance_consistent
       prior_factor: 2
       include_financial_vulnerability: true
-
-    without_company:
-      enabled: false
-      sample: "without_company"
+    without_company_pay_prop:
+      sample: without_company_pay_prop
       prior_factor: 2
       include_financial_vulnerability: true
-
-
-# FIGURES
-# ============================================================
+    simple:
+      family: simple
+      sample: full
+    mixed_logit:
+      family: mixed_logit
+      sample: full
 plots:
   pre_post_distributions:
+  - title: 'Climate-change risk perception: pre vs. post'
+    output: figures/distribution-climate-likert.png
+    items:
+    - climatechange_nh_1
+    - climatechange_nh_2
+    - climatechange_nh_3
+    labels:
+      climatechange_nh_1: In municipality
+      climatechange_nh_2: In canton
+      climatechange_nh_3: In Switzerland
 
-    - output: "results/figures/distribution-climate-likert.png"
-      items:
-        - "climatechange_nh_1"
-        - "climatechange_nh_2"
-        - "climatechange_nh_3"
-      labels:
-        climatechange_nh_1: "In municipality"
-        climatechange_nh_2: "In canton"
-        climatechange_nh_3: "In Switzerland"
+  - title: 'Natural-hazard vulnerability: pre vs. post'
+    output: figures/distribution-nh-likert.png
+    items:
+    - sensitivity_nh_1
+    - sensitivity_nh_2
+    - sensitivity_nh_3
+    labels:
+      sensitivity_nh_1: Personally
+      sensitivity_nh_2: For family
+      sensitivity_nh_3: For municipality
 
-    - output: "results/figures/distribution-nh-likert.png"
-      items:
-        - "sensitivity_nh_1"
-        - "sensitivity_nh_2"
-        - "sensitivity_nh_3"
-      labels:
-        sensitivity_nh_1: "Personally"
-        sensitivity_nh_2: "For family"
-        sensitivity_nh_3: "For municipality"
-        
   hypotheses:
-    - hypothesis: "H1"
-      output: "results/figures/H1-pre-post-shift.png"
+  - hypothesis: H1
+    output: figures/hypotheses/H1-pre-post-shift.png
 
-    - hypothesis: "H2"
-      output: "results/figures/H2-psychological-distance.png"
+  - hypothesis: H2
+    output: figures/hypotheses/H2-psychological-distance.png
 
-    - hypothesis: "H3"
-      output: "results/figures/H3-financial-vulnerability.png"
+  - hypothesis: H3
+    output: figures/hypotheses/H3-financial-vulnerability.png
+  - hypothesis: H4
+    output: figures/hypotheses/H4-vulnerability-heatmap.png
+    ncols: 2
+    levels:
+      costs:
+        # - All people pay the same amount
+        # - People pay proportionally to their income
+        - People & companies being protected by protective measures
+        # - People pay proportionally to their CO2 emissions
+        # - Companies pay proportionally to their CO2 emissions
+      exemptions:
+        # - No groups exempted from costs
+        # - Low-income earners exempted from costs
+        # - Low- and middle-income earners exempted from costs
+      benefits:
+        - Equal protection levels for all municipalities
+        - Municipalities most affected by natural hazards even if they are economically declining
+        # - Economically prosperous municipalities
+        # - Municipalities in which people have lived in for many years should be protected at all costs
+        # - Culturally valuable municipalities e.g. with historic buildings
+analysis:
+  hdi_prob: 0.89
+  robustness:
+    prior_sensitivity:
+      runs:
+      - main
+      - prior_factor_1
+      - prior_factor_4
+      labels:
+        main: Full HCM
+        prior_factor_1: Stronger regularizing priors
+        prior_factor_4: Less regularizing priors
+      colors:
+      - '#1F2022'
+      - '#01665e'
+      - '#542788'
+      alphas:
+      - 0.9
+      - 0.6
+      - 0.6
+      quantities:
+      - pre
+      - shift
+    language:
+      runs:
+      - main
+      - german
+      labels:
+        main: Full sample
+        german: German-speaking region (factor 2)
+      quantities:
+      - pre
+      - shift
+      expected_n_respondents:
+        main: 526
+        german: 316
+    age:
+      runs:
+      - main
+      - older_35
+      labels:
+        main: Full sample
+        older_35: Without age 18-34 (factor 2)
+      quantities:
+      - pre
+      - shift
+    acceptance:
+      runs:
+      - main
+      - acceptance_consistent
+      labels:
+        main: Full sample
+        acceptance_consistent: At most two inconsistent tasks
+      quantities:
+      - pre
+      - shift
+    without_fv:
+      runs:
+      - main
+      - without_fv
+      labels:
+        main: Full HCM
+        without_fv: HCM without FV
+      quantities:
+      - pre
+      - shift
+    without_company_pay_prop:
+      runs:
+      - main
+      - without_company_pay_prop
+      labels:
+        main: Full design
+        without_company_pay_prop: Company/no-exemption tasks excluded
+      quantities:
+      - pre
+      - shift
 
-    - hypothesis: "H4"
-      output: "results/figures/H4-vulnerability-heatmap.png"
+      exclude_levels:
+        costs:
+        - Companies pay proportionally to their CO2 emissions
+
+      recenter_selected_levels: true
+  comparisons:
+    choice_baselines:
+    - main
+    - simple
+    - mixed_logit
+geography:
+  boundaries: resources/swissBOUNDARIES3D_1_5_LV95_LN02.gpkg
+  localities: resources/AMTOVZ_CSV_WGS84.csv
+  locality_sep: ;
+  municipality_layer: tlm_hoheitsgebiet
+  canton_layer: tlm_kantonsgebiet
+  locality_columns:
+    postal_code: PLZ4
+    municipality: BFS-Nr
+    locality: Ortschaftsname
+  municipality_columns:
+    municipality: bfs_nummer
+    canton: kantonsnummer
+  canton_columns:
+    canton: kantonsnummer
+    name: name
+  respondent_postal_column: S0_postal_code_1_TEXT
+  respondent_municipality_column: null
+  respondent_locality_column: null
+  overrides: null
+  small_sample_threshold: 20
+  event_marker:
+    longitude: 7.816378462880258
+    latitude: 46.41984127890122
+    label: Blatten
+  data_version_note: Set the edition/date of the two local geodata files here.
+maps:
+  survey_source: analysis
+  survey:
+    respondent_count:
+      type: count
+      label: Respondents in analysis sample
+      cmap: Purples
+      vmin: 0
+    blatten_solidarity:
+      type: survey
+      columns:
+      - S1_donated_blatten
+      - S1_volunteered_blatten
+      operation: any
+      label: Donation of money or time for Blatten
+      vmin: 0
+      vmax: 1
+      vcenter: 0.5
+      cmap: purple_brown
+    prosocial_any:
+      type: survey
+      columns:
+      - S1_donated_blatten
+      - S1_volunteered_blatten
+      - S1_donated_other
+      - S1_volunteered_other
+      operation: any
+      label: Donation or volunteering
+      vmin: 0
+      vmax: 1
+      vcenter: 0.5
+      cmap: purple_brown
+  posterior:
+    costs_pre:
+      type: utility
+      run: main
+      attribute: costs
+      quantity: pre
+      title: Costs
+      colorbar_label: Pre utility
+      center_zero: true
+      cmap: purple_brown
+    costs_post:
+      type: utility
+      run: main
+      attribute: costs
+      quantity: post
+      title: Costs
+      colorbar_label: Post utility
+      center_zero: true
+      cmap: purple_brown
+    costs_shift:
+      type: utility
+      run: main
+      attribute: costs
+      quantity: shift
+      title: Costs
+      colorbar_label: Shift utility
+      center_zero: true
+      cmap: purple_brown
+    exemptions_pre:
+      type: utility
+      run: main
+      attribute: exemptions
+      quantity: pre
+      title: Exemptions
+      colorbar_label: Pre utility
+      center_zero: true
+      cmap: purple_brown
+    exemptions_post:
+      type: utility
+      run: main
+      attribute: exemptions
+      quantity: post
+      title: Exemptions
+      colorbar_label: Post utility
+      center_zero: true
+      cmap: purple_brown
+    exemptions_shift:
+      type: utility
+      run: main
+      attribute: exemptions
+      quantity: shift
+      title: Exemptions
+      colorbar_label: Shift utility
+      center_zero: true
+      cmap: purple_brown
+    benefits_pre:
+      type: utility
+      run: main
+      attribute: benefits
+      quantity: pre
+      title: Benefits
+      colorbar_label: Pre utility
+      center_zero: true
+      cmap: purple_brown
+    benefits_post:
+      type: utility
+      run: main
+      attribute: benefits
+      quantity: post
+      title: Benefits
+      colorbar_label: Post utility
+      center_zero: true
+      cmap: purple_brown
+    benefits_shift:
+      type: utility
+      run: main
+      attribute: benefits
+      quantity: shift
+      title: Benefits
+      colorbar_label: Shift utility
+      center_zero: true
+      cmap: purple_brown
+    eta_nhv:
+      type: trait
+      run: main
+      variable: eta_nhv
+      label: Mean latent natural-hazard vulnerability
+      colorbar_label: Mean latent natural-hazard vulnerability
+      center_zero: true
+      cmap: purple_brown
+    eta_pd:
+      type: trait
+      run: main
+      variable: eta_pd
+      label: Mean latent psychological closeness
+      colorbar_label: Mean latent psychological closeness
+      center_zero: true
+      cmap: purple_brown
