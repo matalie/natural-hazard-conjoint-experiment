@@ -1,18 +1,18 @@
 """Thin Snakemake entry point for one robustness comparison."""
 from pathlib import Path
-import sys
+# import sys
 
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 
-SNAKEMAKE = globals().get("snakemake")
-if SNAKEMAKE is not None:
-    REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
-else:
-    REPO_ROOT = Path.cwd()
+# SNAKEMAKE = globals().get("snakemake")
+# if SNAKEMAKE is not None:
+#     REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
+# else:
+#     REPO_ROOT = Path.cwd()
 
-sys.path.insert(0, str(REPO_ROOT / "src"))
+# sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from natural_hazard_solidarity.plotting import save_figure
 from natural_hazard_solidarity.robustness_analysis import (

@@ -17,11 +17,18 @@ LIGHT_BROWN = "#f1a340"
 NEUTRAL = "#f7f7f7"
 DARK_GREY = "#1F2022"
 
-ATTRIBUTE_COLORS = {"costs": PURPLE, "exemptions": TEAL, "benefits": BROWN}
+ATTRIBUTE_COLORS = {"costs": PURPLE, "exemptions": TEAL, "benefits": BROWN,}
 
-TEAL_BROWN = LinearSegmentedColormap.from_list("teal_brown", [TEAL, LIGHT_TEAL, NEUTRAL, LIGHT_BROWN, BROWN],)
-BROWN_PURPLE = LinearSegmentedColormap.from_list("brown_purple", [BROWN, LIGHT_BROWN, NEUTRAL, LIGHT_PURPLE, PURPLE],)
+TEAL_BROWN = LinearSegmentedColormap.from_list("teal_brown", [TEAL, LIGHT_TEAL, NEUTRAL, LIGHT_BROWN, BROWN])
+BROWN_PURPLE = LinearSegmentedColormap.from_list("brown_purple", [BROWN, LIGHT_BROWN, NEUTRAL, LIGHT_PURPLE, PURPLE])
 PURPLE_BROWN = BROWN_PURPLE.reversed(name="purple_brown")
+
+# Shared presentation defaults. Scientific choices belong in config.yaml;
+# colors/colormaps belong here so all figures use one thesis style.
+ROBUSTNESS_COLORS = (DARK_GREY, TEAL, PURPLE, BROWN)
+ROBUSTNESS_ALPHAS = (0.90, 0.60, 0.60, 0.60)
+COUNT_CMAP = plt.get_cmap("Purples")
+MAP_CMAP = PURPLE_BROWN
 
 ATTRIBUTE_ORDER = ("costs", "exemptions", "benefits")
 PRETTY_ATTRIBUTES = {
@@ -110,8 +117,8 @@ def add_row_titles_left_of_labels(fig, axes, attr_order, pretty_attr, row_header
 
 
 def plot_forest_panels(plot_df, attr_order, levels_by_attr, panels, subplot_color_map,
-                       draws_map=None, show_density=False, density_height=0.30, density_alpha=0.20,
-                       point_size=62, line_width=2.2, fig_width=11.4, left_margin=0.44,
+                       draws_map=None, show_density=False, density_height=0.40, density_alpha=0.20,
+                       point_size=62, line_width=1.5, fig_width=11.4, left_margin=0.44,
                        per_level_height=0.42, level_wrap_width=50, vconnect=False,
                        row_titles=None, row_title_fs=12, row_title_colors=None, bottom_margin=0.16):
     """Stable plot_df/panels API. Never introduce a second panel_specs API here."""

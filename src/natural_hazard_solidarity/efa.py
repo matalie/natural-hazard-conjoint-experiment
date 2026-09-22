@@ -61,7 +61,7 @@ def fit_efa(attributes: pd.DataFrame):
         from factor_analyzer import FactorAnalyzer
         from factor_analyzer.factor_analyzer import calculate_kmo, calculate_bartlett_sphericity
     except ImportError as exc:
-        raise ImportError("EFA plots require the factor-analyzer package; use workflow/envs/efa.yaml.") from exc
+        raise ImportError("EFA plots require the factor-analyzer package; use workflow/envs/environment.yaml.") from exc
 
     raw = attributes.to_numpy(dtype=float)
     means = raw.mean(axis=0)

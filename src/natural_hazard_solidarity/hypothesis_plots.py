@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import textwrap
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 
@@ -57,33 +58,37 @@ def _padded_xlim(plot_df, kinds, pad_fraction=0.05):
     pad = pad_fraction * (high - low)
     return float(low - pad), float(high + pad)
 
-def plot_h1(idata, conjoint_config,):
+def plot_h1(idata, conjoint_config, plot_config=None):
     """H1: population pre-event utility and average event-related utility shift."""
+    plot_config = plot_config or {}
+    hdi_prob = float(plot_config.get("hdi_prob", 0.89))
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
     _validate_level_order(levels_by_attr)
 
     pre_total_da = posterior["partworth_mean"]
     shift_total_da = posterior["shift_mean"]
+    post_total_da = pre_total_da + shift_total_da
 
-    pre_df, pre_draws = build_level_summary_from_da(pre_total_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pre_total",)
-    shift_df, shift_draws = build_level_summary_from_da(shift_total_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="shift_total",)
+    pre_df, pre_draws = build_level_summary_from_da(pre_total_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pre_total", hdi_prob=hdi_prob)
+    post_df, post_draws = build_level_summary_from_da(post_total_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="post_total", hdi_prob=hdi_prob)
+    shift_df, shift_draws = build_level_summary_from_da(shift_total_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="shift_total", hdi_prob=hdi_prob)
 
-    plot_df = pd.concat([pre_df, shift_df], ignore_index=True)
-    draws_map = {**pre_draws, **shift_draws}
+    plot_df = pd.concat([pre_df, post_df, shift_df], ignore_index=True)
+    draws_map = {**pre_draws, **post_draws, **shift_draws}
     pre_xlim = _padded_xlim(plot_df, ["pre_total"])
 
     panels = [
         {
-            "kinds": ["pre_total"],
-            "title": "Pre-event average utility\n$\\beta_{k}$",
-            "xlabel": "Pre-event average utility\n$\\beta_{k}$",
+            "kinds": ["pre_total", "post_total"],
+            "alphas": [0.5, 1.0],
+            "xlabel": "",
             "xlim": pre_xlim,
             "zero": False,
+            "show_density": False,
         },
         {
             "kinds": ["shift_total"],
-            "title": "Average utility shift\n$\\delta_{k}$",
             "xlabel": "Average utility shift\n$\\delta_{k}$",
             "xlim": pre_xlim,
             "zero": True,
@@ -95,18 +100,34 @@ def plot_h1(idata, conjoint_config,):
         attr_order=ATTRIBUTE_ORDER,
         levels_by_attr=LEVEL_ORDER,
         panels=panels,
-        subplot_color_map=_subplot_color_map(["pre_total", "shift_total"]),
+        subplot_color_map=_subplot_color_map(["pre_total", "post_total", "shift_total",]),
         draws_map=draws_map,
         show_density=True,
         fig_width=11,
         left_margin=0.45,
         per_level_height=0.40,
         level_wrap_width=50,
+        bottom_margin=0.22,
+    )
+    legend_handles = [
+        Line2D([0], [0], marker="o", linestyle="-", color="0.35", linewidth=1.7, markersize=7, alpha=0.5,),
+        Line2D([0], [0], marker="o", linestyle="-", color="0.20", linewidth=1.7, markersize=7, alpha=1,),
+    ]
+
+    fig.legend(
+        legend_handles,
+        [r"Pre average partworth utility $\beta_k$", r"Post average partworth utility $\beta_k^{eff}$",],
+        loc="lower center",
+        bbox_to_anchor=(0.57, 0.08),
+        frameon=False,
+        ncol=1,
+        handlelength=1.6,
+        handletextpad=0.8,
     )
     return fig, plot_df
 
 
-def _build_h2(idata, conjoint_config, pd_sign=1.0, plot_config=None):
+def _build_h2(idata, conjoint_config, pd_sign=1.0, hdi_prob=0.89):
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
     _validate_level_order(levels_by_attr)
@@ -117,9 +138,9 @@ def _build_h2(idata, conjoint_config, pd_sign=1.0, plot_config=None):
     shift_psy_da = float(pd_sign) * posterior["shift_psy"]
     post_pd_da = gamma_pd_da + shift_psy_da
     
-    pd_pre_df, pd_pre_draws = build_level_summary_from_da(gamma_pd_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_pre",)
-    pd_shift_df, pd_shift_draws = build_level_summary_from_da(shift_psy_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_shift",)
-    pd_post_df, pd_post_draws = build_level_summary_from_da(post_pd_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_post",)
+    pd_pre_df, pd_pre_draws = build_level_summary_from_da(gamma_pd_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_pre", hdi_prob=hdi_prob)
+    pd_shift_df, pd_shift_draws = build_level_summary_from_da(shift_psy_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_shift", hdi_prob=hdi_prob)
+    pd_post_df, pd_post_draws = build_level_summary_from_da(post_pd_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="pd_post", hdi_prob=hdi_prob)
 
     plot_df = pd.concat([pd_pre_df, pd_shift_df, pd_post_df], ignore_index=True)
     draws_map = {**pd_pre_draws, **pd_shift_draws, **pd_post_draws}
@@ -135,24 +156,21 @@ def plot_h2(idata, conjoint_config, plot_config=None):
     """H2: psychological-distance associations before the event and with the shift."""
     plot_config = plot_config or {}
     pd_sign = float(plot_config.get("pd_sign", 1.0))
+    hdi_prob = float(plot_config.get("hdi_prob", 0.89))
 
     plot_df, draws_map, h2_xlim = _build_h2(
-        idata,
-        conjoint_config,
-        pd_sign=pd_sign,
+        idata, conjoint_config, pd_sign=pd_sign, hdi_prob=hdi_prob
     )
 
     panels = [
         {
             "kinds": ["pd_pre"],
-            "title": "Pre-event utility association\n$\\gamma_{PD}$",
             "xlabel": "Pre-event utility association\n$\\gamma_{PD}$",
             "xlim": h2_xlim,
             "zero": True,
         },
         {
             "kinds": ["pd_shift"],
-            "title": "Utility shift association\n$\\phi_{PD}$",
             "xlabel": "Utility shift association\n$\\phi_{PD}$",
             "xlim": h2_xlim,
             "zero": True,
@@ -177,6 +195,8 @@ def plot_h2(idata, conjoint_config, plot_config=None):
 
 def plot_h3(idata, conjoint_config, plot_config=None):
     """H3: financial-vulnerability association with the event-related utility shift."""
+    plot_config = plot_config or {}
+    hdi_prob = float(plot_config.get("hdi_prob", 0.89))
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
     _validate_level_order(levels_by_attr)
@@ -188,9 +208,9 @@ def plot_h3(idata, conjoint_config, plot_config=None):
     shift_fin_da = posterior["shift_fin"]
     post_fv_da = gamma_fv_da + shift_fin_da
     
-    fin_pre_df, fin_pre_draws = build_level_summary_from_da(gamma_fv_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_pre",)
-    fin_shift_df, fin_shift_draws = build_level_summary_from_da(shift_fin_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_shift",)
-    fin_post_df, fin_post_draws = build_level_summary_from_da(post_fv_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_post",)
+    fin_pre_df, fin_pre_draws = build_level_summary_from_da(gamma_fv_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_pre", hdi_prob=hdi_prob)
+    fin_shift_df, fin_shift_draws = build_level_summary_from_da(shift_fin_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_shift", hdi_prob=hdi_prob)
+    fin_post_df, fin_post_draws = build_level_summary_from_da(post_fv_da, ATTRIBUTE_ORDER, levels_by_attr, conjoint_config, kind_label="fin_post", hdi_prob=hdi_prob)
 
     plot_df = pd.concat(
         [fin_pre_df, fin_shift_df, fin_post_df],
@@ -199,19 +219,17 @@ def plot_h3(idata, conjoint_config, plot_config=None):
     draws_map = {**fin_pre_draws, **fin_shift_draws, **fin_post_draws}
 
     # The legacy notebook deliberately reused H2's x range for H3.
-    _, _, h2_xlim = _build_h2(idata, conjoint_config, pd_sign=1.0)
+    _, _, h2_xlim = _build_h2(idata, conjoint_config, pd_sign=1.0, hdi_prob=hdi_prob)
 
     panels = [
         {
             "kinds": ["fin_pre"],
-            "title": "Pre-event utility assiciation\n$\\gamma_{FV}$",
             "xlabel": "Pre-event utility association\n$\\gamma_{FV}$",
             "xlim": h2_xlim,
             "zero": True,
         },
         {
             "kinds": ["fin_shift"],
-            "title": "Utility shift association\n$\\phi_{FV}$",
             "xlabel": "Utility shift association\n$\\phi_{FV}$",
             "xlim": h2_xlim,
             "zero": True,
@@ -223,7 +241,7 @@ def plot_h3(idata, conjoint_config, plot_config=None):
         attr_order=ATTRIBUTE_ORDER,
         levels_by_attr=LEVEL_ORDER,
         panels=panels,
-        subplot_color_map=_subplot_color_map(["fin_pre", "fin_shift", "fin_post"]),
+        subplot_color_map=_subplot_color_map(["fin_pre", "fin_shift", "fin_post",]),
         draws_map=draws_map,
         show_density=True,
         fig_width=11,
@@ -313,7 +331,7 @@ def _resolve_h4_levels(plot_config, levels_by_attr):
 
 def _plot_multi_level_heatmaps(
     idata, levels_h4, conjoint_config, nhv_axis, fv_axis,
-    quantity="shift", pd_fixed=0.0, panel_width=3.7, panel_height=3.8,
+    quantity="shift", pd_fixed=0.0, hdi_prob=0.89, panel_width=3.7, panel_height=3.8,
 ):
     """Plot selected H4 levels with one row per attribute."""
     attrs = [a for a in ATTRIBUTE_ORDER if a in levels_h4 and levels_h4[a]]
@@ -328,7 +346,7 @@ def _plot_multi_level_heatmaps(
                 idata=idata, attr=attr, level=level,
                 conjoint_config=conjoint_config,
                 nhv_axis=nhv_axis, fv_axis=fv_axis,
-                quantity=quantity, pd_fixed=pd_fixed,
+                quantity=quantity, pd_fixed=pd_fixed, hdi_prob=hdi_prob,
             )
             surfaces[(attr, level)] = z_mean
             scale_values += [float(np.nanmin(z_mean)), float(np.nanmax(z_mean))]
@@ -441,6 +459,7 @@ def _plot_multi_level_heatmaps(
 def plot_h4(idata, conjoint_config, plot_config=None):
     """H4: additive NHV/FV utility surface for any requested conjoint levels."""
     plot_config = plot_config or {}
+    hdi_prob = float(plot_config.get("hdi_prob", 0.89))
     posterior = idata.posterior
 
     if "gamma_fv" not in posterior or "shift_fin" not in posterior:
@@ -480,6 +499,7 @@ def plot_h4(idata, conjoint_config, plot_config=None):
         fv_axis=fv_axis,
         quantity=plot_config.get("quantity", "shift"),
         pd_fixed=float(plot_config.get("pd_fixed", 0.0)),
+        hdi_prob=hdi_prob,
         panel_width=float(plot_config.get("panel_width", 3.0)),
         panel_height=float(plot_config.get("panel_height", 2.8)),
     )

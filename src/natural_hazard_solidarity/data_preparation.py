@@ -428,7 +428,7 @@ def build_conjoint_long(df, config):
     options.columns.name = None
     choices = df.melt(id_vars="respondent_id", value_vars=choice_columns, var_name="var", value_name="choice")
     choices[["nh_event", "task"]] = choices["var"].str.extract(r"S(\d+)_(\d+)_conjoint_prefer").astype(int)
-    choices["choice"] = pd.to_numeric(choices["choice"].replace(mp.PREFERENCE_MAP), errors="coerce")
+    choices["choice"] = pd.to_numeric(choices["choice"].map(lambda value: mp.PREFERENCE_MAP.get(value, value)), errors="coerce")
     out = options.merge(choices[key + ["choice"]], on=key, how="left", validate="many_to_one")
     out["chosen"] = out["choice"].eq(out["option"]).astype("int8")
     out = out.drop(columns="choice").sort_values(key + ["option"]).reset_index(drop=True)

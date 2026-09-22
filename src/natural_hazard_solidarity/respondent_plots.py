@@ -5,7 +5,6 @@ wrapper in ``workflow/scripts/plot_respondents.py``.
 """
 from __future__ import annotations
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 

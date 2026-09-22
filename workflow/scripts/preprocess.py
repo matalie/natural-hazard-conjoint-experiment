@@ -1,10 +1,11 @@
 """Three coarse preprocessing stages; no notebooks, no sampling."""
 from pathlib import Path
-import sys
 import json
 import hashlib
 import pandas as pd
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.data_preparation import (clean_wave, merge_waves, prepare_analysis_sample,
                                                       build_conjoint_long, encode_conjoint)
 

@@ -1,11 +1,11 @@
 """Thin Snakemake entry point for posterior diagnostic figures."""
 from pathlib import Path
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.diagnostic_plots import plot_partworth_trace
 from natural_hazard_solidarity.plotting import save_figure
 

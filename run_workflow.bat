@@ -1,6 +1,22 @@
 @echo off
 setlocal
+
+rem Run the Snakemake workflow from the repository root.
+rem Usage examples:
+rem   run_workflow.bat
+rem   run_workflow.bat main_model
+rem   run_workflow.bat check
+rem   run_workflow.bat -n
+rem
+rem The script:
+rem   1. loads optional machine-specific settings,
+rem   2. activates the shared project environment,
+rem   3. configures the external MSYS2 compiler required by PyTensor,
+rem   4. limits nested numerical-library threading,
+rem   5. starts Snakemake and forwards all command-line arguments.
+
 cd /d "%~dp0"
+
 
 rem ------------------------------------------------------------
 rem Optional machine-specific settings
@@ -12,16 +28,12 @@ if exist "%~dp0local_settings.bat" (
 rem ------------------------------------------------------------
 rem Defaults
 rem ------------------------------------------------------------
-if not defined SNAKEMAKE_ENV (
-    set "SNAKEMAKE_ENV=snakemake"
+if not defined PROJECT_ENV (
+    set "PROJECT_ENV=natural-hazard-solidarity"
 )
 
 if not defined SNAKEMAKE_CORES (
     set "SNAKEMAKE_CORES=4"
-)
-
-if not defined SNAKEMAKE_CONDA_PREFIX (
-    set "SNAKEMAKE_CONDA_PREFIX=%USERPROFILE%\snakemake_envs"
 )
 
 if not defined MSYS2_UCRT64 (
@@ -33,29 +45,36 @@ if not defined PYTENSOR_CXX (
 )
 
 rem ------------------------------------------------------------
-rem Activate Snakemake
+rem Project environment
 rem ------------------------------------------------------------
-call "%USERPROFILE%\AppData\Local\miniforge3\Scripts\activate.bat" "%SNAKEMAKE_ENV%"
+call "%LOCALAPPDATA%\miniforge3\Scripts\activate.bat" "%PROJECT_ENV%"
 
 if errorlevel 1 (
-    echo ERROR: Could not activate conda environment "%SNAKEMAKE_ENV%".
+    echo ERROR: Could not activate conda environment "%PROJECT_ENV%".
+    echo Create it first with:
+    echo     conda env create -f environment.yaml
     exit /b 1
 )
 
+rem Make project's src/ package importable in Python processes
+if defined PYTHONPATH (
+    set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
+) else (
+    set "PYTHONPATH=%CD%\src"
+)
+
 rem ------------------------------------------------------------
-rem External compiler used by PyTensor
+rem PyTensor compiler and validation
 rem ------------------------------------------------------------
 set "PATH=%MSYS2_UCRT64%\bin;%PATH%"
 set "PYTENSOR_FLAGS=cxx=%PYTENSOR_CXX%"
 
-rem Avoid thread oversubscription
+rem Prevent numerical libraries from starting additional thread pools.
 set "OMP_NUM_THREADS=1"
 set "MKL_NUM_THREADS=1"
 set "OPENBLAS_NUM_THREADS=1"
 
-rem ------------------------------------------------------------
-rem Fail early if compiler is unavailable
-rem ------------------------------------------------------------
+rem Validataion
 if not exist "%MSYS2_UCRT64%\bin\g++.exe" (
     echo ERROR: g++.exe not found:
     echo        %MSYS2_UCRT64%\bin\g++.exe
@@ -78,8 +97,6 @@ rem ------------------------------------------------------------
 snakemake ^
     -s workflow/Snakefile ^
     --cores %SNAKEMAKE_CORES% ^
-    --sdm conda ^
-    --conda-prefix "%SNAKEMAKE_CONDA_PREFIX%" ^
     %*
 
 endlocal

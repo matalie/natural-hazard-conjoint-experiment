@@ -21,7 +21,7 @@ from .posterior import (
     group_summary,
     quantity_da,
 )
-from .plotting import (LEVEL_LABELS, LEVEL_ORDER, PURPLE_BROWN,)
+from .plotting import COUNT_CMAP, LEVEL_LABELS, LEVEL_ORDER, MAP_CMAP
 
 def integer_codes(series):
     values = pd.to_numeric(series, errors="coerce")
@@ -52,7 +52,7 @@ def build_canton_lookup(localities, municipalities, cfg):
     return locations.merge(units, on="municipality", how="left", validate="many_to_one").drop_duplicates()
 
 
-def assign_cantons(metadata, lookup, cfg, overrides=None):
+def assign_cantons(metadata, lookup, cfg,):
     """Assign one canton per respondent when the evidence is unique/resolvable."""
     if metadata.respondent_id.isna().any() or metadata.respondent_id.duplicated().any():
         raise ValueError("Geocoding requires one unique respondent_id per row.")
@@ -60,8 +60,6 @@ def assign_cantons(metadata, lookup, cfg, overrides=None):
     postal_col = cfg["respondent_postal_column"]
     if postal_col not in metadata:
         raise KeyError(f"Postal-code column missing: {postal_col}")
-    municipal_col = cfg.get("respondent_municipality_column")
-    local_col = cfg.get("respondent_locality_column")
     postal = integer_codes(metadata[postal_col])
 
     rows = []
@@ -77,15 +75,6 @@ def assign_cantons(metadata, lookup, cfg, overrides=None):
         elif len(cantons) > 1:
             status = "ambiguous_postcode"
             selected = candidates
-            if (municipal_col and municipal_col in metadata and pd.notna(person[municipal_col])):
-                bfs = pd.to_numeric(person[municipal_col], errors="coerce")
-                selected = selected.loc[selected.municipality.eq(bfs)]
-            elif local_col and local_col in metadata and pd.notna(person[local_col]):
-                selected = selected.loc[
-                    selected.locality.eq(
-                        str(person[local_col]).strip().casefold()
-                    ).fillna(False)
-                ]
             if len(selected.canton.unique()) == 1:
                 assigned, status = int(selected.canton.iloc[0]), "resolved_with_locality"
 
@@ -104,20 +93,6 @@ def assign_cantons(metadata, lookup, cfg, overrides=None):
         )
 
     result = pd.DataFrame(rows)
-    if overrides is not None and not overrides.empty:
-        required = {"respondent_id", "canton", "reason"}
-        if (not required.issubset(overrides.columns) or overrides.respondent_id.duplicated().any()):
-            raise ValueError("Overrides need unique respondent_id, canton, reason columns.")
-        
-        valid_cantons = set(lookup.canton.dropna().astype(int))
-        for _, row in overrides.iterrows():
-            mask = result.respondent_id.astype(str).eq(str(row.respondent_id))
-            if not mask.any() or pd.isna(row.reason) or not str(row.reason).strip():
-                raise ValueError(f"Unknown respondent or missing override reason: {row.respondent_id}")
-            canton = pd.to_numeric(row.canton, errors="coerce")
-            if (pd.isna(canton) or canton != int(canton) or int(canton) not in valid_cantons):
-                raise ValueError("Override canton is absent from the supplied lookup.")
-            result.loc[mask, ["canton", "geo_status", "override_reason"]] = [int(canton), "manual_override", row.reason]
     result["canton"] = result.canton.astype("Int64")
     return result
 
@@ -255,11 +230,8 @@ def draw_canton_maps(geometry, summaries, spec, cfg):
     if not values.size:
         raise ValueError("No mapped values: inspect the geographic assignment audit.")
 
-    cmap = (
-        PURPLE_BROWN
-        if spec.get("cmap") == "purple_brown"
-        else plt.get_cmap(spec.get("cmap", "RdBu_r"))
-    )
+    # Colormap is a presentation choice, not a scientific config option.
+    cmap = COUNT_CMAP if spec["type"] == "count" else MAP_CMAP
     if spec.get("center_zero", False):
         vmax = spec.get("vmax", max(float(np.abs(values).max()), 0.01))
         norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)

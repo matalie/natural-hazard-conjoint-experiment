@@ -1,39 +1,31 @@
-"""One configuration, explicit inputs, and stable public targets."""
+"""Top-level Snakemake workflow.
 
-from pathlib import Path, PurePosixPath
+This file defines shared configuration and paths only.
+Implementation rules are grouped by purpose under workflow/rules/.
+"""
+
 import re
 
+# ---------------------------------------------------------------------
+# Shared configuration
+# ---------------------------------------------------------------------
 configfile: "config/config.yaml"
 
+# All generated outputs are written below this directory.
+ROOT = config["project"]["output_root"].rstrip("/\\").replace("\\", "/")
 
-# ---------------------------------------------------------------------
-# Core configuration
-# ---------------------------------------------------------------------
-
-ROOT = (
-    config["project"]["output_root"]
-    .rstrip("/\\")
-    .replace("\\", "/")
-)
-
+# Python source files are explicit rule dependencies so Snakemake reruns
+# affected outputs when analysis code changes.
 SRC = "src/natural_hazard_solidarity/"
 
 CODING = config["conjoint"]["coding"]
 RUNS = config["models"]["runs"]
 HDI = config["analysis"]["hdi_prob"]
 
-ROBUSTNESS = config["analysis"]["robustness"]
-COMPARISONS = config["analysis"]["comparisons"]
-
-SURVEY_MAPS = config["maps"]["survey"]
-POSTERIOR_MAPS = config["maps"]["posterior"]
-
-GEO = config["geography"]
 
 # ---------------------------------------------------------------------
-# Common directories and files
+# Shared paths
 # ---------------------------------------------------------------------
-
 DATA_DIR = f"{ROOT}/data"
 MODEL_DIR = f"{ROOT}/models"
 FIGURE_DIR = f"{ROOT}/figures"
@@ -44,231 +36,35 @@ ANALYSIS = f"{DATA_DIR}/analysis_sample.parquet"
 COMBINED = f"{DATA_DIR}/combined_surveys.parquet"
 ASSIGNMENTS = f"{DATA_DIR}/respondent_geography.parquet"
 
+
 # ---------------------------------------------------------------------
-# Helpers
+# Shared helpers
 # ---------------------------------------------------------------------
 def regex_keys(mapping):
-    """Regex matching exactly the keys of a config mapping."""
+    """Return a wildcard regex matching exactly the keys of a mapping."""
     if not mapping:
         return r"(?!)"
-
-    return "(?:" + "|".join(
-        re.escape(str(key))
-        for key in mapping
-    ) + ")"
-
-def plot_specs(entries):
-    """Index configured figure specifications by output filename stem."""
-    result = {}
-
-    for entry in entries:
-        path = PurePosixPath(entry["output"])
-
-        if (
-            path.is_absolute()
-            or path.suffix != ".png"
-            or not path.parts
-            or path.parts[0] != "figures"
-            or ".." in path.parts
-        ):
-            raise ValueError(
-                "Plot outputs must be relative PNG paths below figures/, "
-                "e.g. figures/hypotheses/H1.png."
-            )
-
-        if path.stem in result:
-            raise ValueError(f"Duplicate plot filename in config: {path.name}")
-
-        result[path.stem] = entry
-
-    return result
-
-# ---------------------------------------------------------------------
-# Config-defined plot specifications
-# ---------------------------------------------------------------------
-
-HYPOTHESES = plot_specs(config["plots"]["hypotheses"])
-DISTRIBUTIONS = plot_specs(config["plots"]["pre_post_distributions"])
+    return "(?:" + "|".join(re.escape(str(key)) for key in mapping) + ")"
 
 
 # ---------------------------------------------------------------------
-# Validation of model references
+# Workflow implementation
 # ---------------------------------------------------------------------
-
-ROBUSTNESS_RUNS = sorted({
-    run
-    for spec in ROBUSTNESS.values()
-    for run in spec["runs"]
-})
-
-for name, spec in ROBUSTNESS.items():
-    runs = spec["runs"]
-    if len(runs) != len(set(runs)):
-        raise ValueError(f"Duplicate model in robustness comparison '{name}'.")
-
-    undefined = set(runs) - set(RUNS)
-    if undefined:
-        raise ValueError(f"Robustness comparison '{name}' references undefined run(s): {sorted(undefined)}")
-
-
-for name, runs in COMPARISONS.items():
-    undefined = set(runs) - set(RUNS)
-    if undefined:
-        raise ValueError(f"LOO comparison '{name}' references undefined run(s): {sorted(undefined)}")
+include: "rules/data.smk"
+include: "rules/models.smk"
+include: "rules/analysis.smk"
+include: "rules/validation.smk"
 
 
 # ---------------------------------------------------------------------
-# Derived model outputs
-# ---------------------------------------------------------------------
-
-DEFAULT_MODEL_FILES = [
-    f"{MODEL_DIR}/{run}.nc"
-    for run in config["models"]["default_runs"]
-]
-
-ROBUSTNESS_MODEL_FILES = [
-    f"{MODEL_DIR}/{run}.nc"
-    for run in ROBUSTNESS_RUNS
-]
-
-
-# ---------------------------------------------------------------------
-# Config-defined figure outputs
-# ---------------------------------------------------------------------
-HYPOTHESIS_FIGURES = [f"{ROOT}/{spec['output']}" for spec in HYPOTHESES.values()]
-DISTRIBUTION_FIGURES = [f"{ROOT}/{spec['output']}" for spec in DISTRIBUTIONS.values()]
-ROBUSTNESS_FIGURES = [f"{FIGURE_DIR}/robustness/{name}.png" for name in ROBUSTNESS]
-SURVEY_MAP_FIGURES = [f"{FIGURE_DIR}/maps/survey-{name}.png" for name in SURVEY_MAPS]
-POSTERIOR_MAP_FIGURES = [f"{FIGURE_DIR}/maps/posterior-{name}.png" for name in POSTERIOR_MAPS]
-
-# ---------------------------------------------------------------------
-# Fixed thesis figures
-# ---------------------------------------------------------------------
-DESERVINGNESS_FIGURE = (f"{FIGURE_DIR}/likert_histograms_deservingness.png")
-EFA_CORRELATION_FIGURE = (f"{FIGURE_DIR}/Correlation-matrix.png")
-EFA_COMPARISON_FIGURE = (f"{FIGURE_DIR}/EFA-2-and-3-factors-comparison-square-cells.png")
-LATENT_CONSTRUCT_FIGURE = (f"{FIGURE_DIR}/latent_constructs_eta_pd_eta_nhv.png")
-TRACE_FIGURE = (f"{FIGURE_DIR}/trace_posterior_shift_mean_all_groups.png")
-EFA_FIGURES = [EFA_CORRELATION_FIGURE, EFA_COMPARISON_FIGURE,]
-LIKERT_SHIFTS_FIGURE = f"{FIGURE_DIR}/Likert-shifts.png"
-
-# ---------------------------------------------------------------------
-# Respondent-impact outputs
-# ---------------------------------------------------------------------
-RESPONDENT_IMPACT_SPECS = [
-    {
-        "attribute": attribute,
-        "level": level,
-        "index": index,
-    }
-    for attribute, attribute_config in config["conjoint"]["attributes"].items()
-    for index, level in enumerate(attribute_config["levels"], start=1,)
-]
-
-RESPONDENT_IMPACT_FIGURES = [
-    (
-        f"{FIGURE_DIR}/"
-        f"respondent-impact-"
-        f"{spec['attribute']}-"
-        f"{spec['index']:02d}.png"
-    )
-    for spec in RESPONDENT_IMPACT_SPECS
-]
-
-RESPONDENT_IMPACT_TABLES = [
-    (
-        f"{TABLE_DIR}/respondent_impact/"
-        f"{spec['attribute']}-"
-        f"{spec['index']:02d}.csv"
-    )
-    for spec in RESPONDENT_IMPACT_SPECS
-]
-
-# ---------------------------------------------------------------------
-# Aggregate output groups
-# ---------------------------------------------------------------------
-REQUESTED_FIGURES = (
-    DISTRIBUTION_FIGURES
-    + [DESERVINGNESS_FIGURE]
-    + [LIKERT_SHIFTS_FIGURE]
-    + EFA_FIGURES
-    + [LATENT_CONSTRUCT_FIGURE]
-    + RESPONDENT_IMPACT_FIGURES
-    + [TRACE_FIGURE]
-)
-
-MODEL_COMPARISON_TABLES = [f"{TABLE_DIR}/comparisons/{name}.csv" for name in COMPARISONS]
-ALL_MAP_FIGURES = (SURVEY_MAP_FIGURES + POSTERIOR_MAP_FIGURES)
-
-# ---------------------------------------------------------------------
-# Run the total workflow
+# Default workflow to run all: conjoint preparation, models, and plos
 # ---------------------------------------------------------------------
 rule all:
     input:
         CONJOINT,
         DEFAULT_MODEL_FILES,
-        DISTRIBUTION_FIGURES,
+        REQUESTED_FIGURES,
         HYPOTHESIS_FIGURES,
+        MODEL_DIAGNOSTIC_TABLES,
+        ALL_MAP_FIGURES,
     default_target: True
-
-# ---------------------------------------------------------------------
-# Workflow implementation
-#
-# These files use the globals defined above.
-# Therefore all shared constants must be defined before the includes.
-# ---------------------------------------------------------------------
-include: "rules/data.smk"
-include: "rules/models.smk"
-include: "rules/analysis.smk"
-
-# ---------------------------------------------------------------------
-# Run single specific data processing, modeling, or plotting steps
-# ---------------------------------------------------------------------
-rule preprocess:
-    input:
-        CONJOINT
-
-rule main_model:
-    input:
-        f"{MODEL_DIR}/main.nc"
-
-rule hypotheses:
-    input:
-        HYPOTHESIS_FIGURES
-
-rule diagnostic_plots:
-    input:
-        TRACE_FIGURE
-
-rule requested_plots:
-    input:
-        REQUESTED_FIGURES
-
-rule robustness_plots:
-    input:
-        ROBUSTNESS_FIGURES
-
-rule model_comparison:
-    input:
-        MODEL_COMPARISON_TABLES
-
-rule maps:
-    input:
-        ALL_MAP_FIGURES
-
-# ---------------------------------------------------------------------
-# Code / workflow validation
-# ---------------------------------------------------------------------
-rule check:
-    input:
-        list(map(str, Path(SRC).glob("*.py"))),
-        list(map(str, Path("tests").glob("*.py"))),
-        list(map(str, Path("workflow/scripts").glob("*.py"))),
-        list(map(str, Path("tools").glob("*.py"))),
-        "config/config.yaml",
-    output:
-        report=f"{ROOT}/validation/tests.txt"
-    conda:
-        "envs/geo.yaml"
-    script:
-        "scripts/check.py"

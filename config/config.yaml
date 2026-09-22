@@ -1,5 +1,8 @@
-# Reference migration v2. Outputs are isolated from old results by default.
-# Legacy within-wave + ITEM-wise cross-wave imputation. No adjusted HCM.
+# Main configuration. Scientific and runtime choices live here.
+# Specific output paths and plotting defaults (fonts, colors, colormaps, layout) are defined in the workflow/code.
+# One complete run must use one conjoint coding consistently ("effect" or "dummy").
+
+# Project definition and input survey files
 project:
   output_root: results
 data:
@@ -16,23 +19,44 @@ data:
       S0: id
       S1: m
     respondent_id_column: null
+
+# MCMC sampling settings used for model estimation
+sampling:
+  draws: 500                 # Retained posterior draws per chain after tuning
+  tune: 500                  # Warm-up/adaptation draws per chain, which are not retained
+  chains: 4                   # Number of independent MCMC chains
+  cores: 2                    # Maximum number of chains sampled in parallel
+  blas_threads_per_chain: 1   # Numerical-library threads per chain (keep low to avoid oversubscription)
+  random_seed: 123            # Seed for reproducible sampling
+  target_accept: 0.95         # NUTS target acceptance rate (higher values are more conservative but slower)
+  progressbar: true           # Show sampling progress
+  log_likelihood: true        # Store pointwise log likelihood, required for LOO model comparison
+
+# Data preaparation Survey cleaning and analysis-sample construction
 preprocessing:
-  skiprows:
+  skiprows: # row numbers in survey files which are empty or do not include header/data
   - 1
   - 2
-  quality:
+  quality: # filters respondent based on attention check and straightlining
     attention_column: attention_check
     attention_valid_value: Agree
     max_ids_per_ip: 2
-    straightliner_mode: deservingness
-  duration:
+    # Straightliner exclusion:
+    straightliner_mode: deservingness # OR
+    # "deservingness" = deservingness items only OR
+    # "medium"        = deservingness, identity, and GAL-TAN items OR 
+    # "all"           = all configured Likert groups, including NH sensitivity and psychological distance
+  duration: # filters speeders and slow respondents
     S0:
       lower_quantile: 0.05
       upper_quantile: 0.95
     S1:
       lower_quantile: 0.05
-      upper_quantile: null
-  imputation:
+      upper_quantile: null # No upper-duration exclusion for S1
+  
+  # For latent construct creation: within-construct item imputation followed by cross-wave fallback for
+  # natural-hazard and financial-vulnerability items.
+  imputation: # TODO
     method: median
     likert_min: 1
     likert_max: 6
@@ -40,8 +64,12 @@ preprocessing:
       sensitivity_nh: 2
       psychological_distance: 2
       financial_vulnerability: 1
+  
   acceptance_consistency:
     max_inconsistent_tasks: 2
+
+# Wave-independent item names used during preprocessing and imputation
+# Wave prefixes (S0_/S1_) are added by the preprocessing code
 analysis_items:
   sensitivity_nh:
   - sensitivity_nh_1
@@ -53,10 +81,15 @@ analysis_items:
   - psycho_distance_1
   - psycho_distance_2
   - psycho_distance_4
+
+# Conjoint preparation
 conjoint:
-  coding: effect
+  coding: effect # "effect" or "dummy": use one coding consitently within one run, the dummy coding is not yet finally tested
   left_option: 1
   right_option: 2
+  # All possible attribute levels and the omitted baseline level.
+  # Effect coding: baseline coefficient is reconstructed from the non-baseline coefficients.
+  # Dummy coding: baseline coefficient is fixed at zero.
   attributes:
     costs:
       baseline: All people pay the same amount
@@ -80,7 +113,8 @@ conjoint:
       - Economically prosperous municipalities
       - Municipalities in which people have lived in for many years should be protected at all costs
       - Culturally valuable municipalities e.g. with historic buildings
-  respondent_columns:
+  # Respondent-level variables retained alongside the conjoint design for sample filtering, subgroup analyses, latent constructs, and plotting
+  respondent_columns: 
   - respondent_id
   - respondent_key
   - S0_language_region
@@ -102,6 +136,8 @@ conjoint:
   - S1_psycho_distance_1
   - S1_psycho_distance_2
   - S1_psycho_distance_4
+
+# Wave-specific observed variables used to define the latent constructs in the HCM
 constructs:
   natural_hazard_vulnerability:
   - S0_sensitivity_nh_1
@@ -112,6 +148,9 @@ constructs:
   - S1_psycho_distance_2
   - S1_psycho_distance_4
   financial_vulnerability: S0_finan_vulnerability_1
+
+# Model samples which are used depending on the case
+# Full sampel is used per default, for robustness testing, the subsamples are used
 samples:
   full:
     type: full
@@ -139,51 +178,43 @@ samples:
     conditions:
       costs: Companies pay proportionally to their CO2 emissions
       exemptions: No groups exempted from costs
-sampling:
-  draws: 1500
-  tune: 1500
-  chains: 4
-  cores: 2
-  blas_threads_per_chain: 1
-  random_seed: 123
-  target_accept: 0.95
-  progressbar: true
-  log_likelihood: true
+
+# Model specifications
+# - for the main model
+# - for the robustness check models, which are testing data robustness and model (design) robustness
 models:
   default_runs:
   - main
   runs:
     main:
       sample: full
+      include_financial_vulnerability: true
+    prior_factor_half:
+      sample: full
+      prior_factor: 0.5
+      include_financial_vulnerability: true
+    prior_factor_double:
+      sample: full
       prior_factor: 2
-      include_financial_vulnerability: true
-    prior_factor_1:
-      sample: full
-      prior_factor: 1
-      include_financial_vulnerability: true
-    prior_factor_4:
-      sample: full
-      prior_factor: 4
       include_financial_vulnerability: true
     without_fv:
       sample: full
-      prior_factor: 2
       include_financial_vulnerability: false
     german:
       sample: german
-      prior_factor: 2
       include_financial_vulnerability: true
+      sampling:
+        tune: 500
+        target_accept: 0.99
+        init: adapt_diag
     older_35:
       sample: older_35
-      prior_factor: 2
       include_financial_vulnerability: true
     acceptance_consistent:
       sample: acceptance_consistent
-      prior_factor: 2
       include_financial_vulnerability: true
     without_company_pay_prop:
       sample: without_company_pay_prop
-      prior_factor: 2
       include_financial_vulnerability: true
     simple:
       family: simple
@@ -191,83 +222,75 @@ models:
     mixed_logit:
       family: mixed_logit
       sample: full
+
+# plot specifications
 plots:
   pre_post_distributions:
-  - title: 'Climate-change risk perception: pre vs. post'
-    output: figures/distribution-climate-likert.png
-    items:
-    - climatechange_nh_1
-    - climatechange_nh_2
-    - climatechange_nh_3
-    labels:
-      climatechange_nh_1: In municipality
-      climatechange_nh_2: In canton
-      climatechange_nh_3: In Switzerland
-
-  - title: 'Natural-hazard vulnerability: pre vs. post'
-    output: figures/distribution-nh-likert.png
-    items:
-    - sensitivity_nh_1
-    - sensitivity_nh_2
-    - sensitivity_nh_3
-    labels:
-      sensitivity_nh_1: Personally
-      sensitivity_nh_2: For family
-      sensitivity_nh_3: For municipality
-
+    distribution-climate-likert:
+      title: 'Climate-change risk perception: pre vs. post'
+      items:
+      - climatechange_nh_1
+      - climatechange_nh_2
+      - climatechange_nh_3
+      labels:
+        climatechange_nh_1: In municipality
+        climatechange_nh_2: In canton
+        climatechange_nh_3: In Switzerland
+    distribution-nh-likert:
+      title: 'Natural-hazard vulnerability: pre vs. post'
+      items:
+      - sensitivity_nh_1
+      - sensitivity_nh_2
+      - sensitivity_nh_3
+      labels:
+        sensitivity_nh_1: Personally
+        sensitivity_nh_2: For family
+        sensitivity_nh_3: For municipality
   hypotheses:
-  - hypothesis: H1
-    output: figures/hypotheses/H1-pre-post-shift.png
+    H1-pre-post-shift:
+      hypothesis: H1
+    H2-psychological-distance:
+      hypothesis: H2
+    H3-financial-vulnerability:
+      hypothesis: H3
+    H4-vulnerability-heatmap:
+      hypothesis: H4
+      levels:
+        costs:
+          # - All people pay the same amount
+          # - People pay proportionally to their income
+          - People & companies being protected by protective measures
+          # - People pay proportionally to their CO2 emissions
+          # - Companies pay proportionally to their CO2 emissions
+        exemptions:
+          # - No groups exempted from costs
+          # - Low-income earners exempted from costs
+          # - Low- and middle-income earners exempted from costs
+        benefits:
+          - Equal protection levels for all municipalities
+          - Municipalities most affected by natural hazards even if they are economically declining
+          # - Economically prosperous municipalities
+          # - Municipalities in which people have lived in for many years should be protected at all costs
+          # - Culturally valuable municipalities e.g. with historic buildings
+      quantity: shift
 
-  - hypothesis: H2
-    output: figures/hypotheses/H2-psychological-distance.png
-
-  - hypothesis: H3
-    output: figures/hypotheses/H3-financial-vulnerability.png
-  - hypothesis: H4
-    output: figures/hypotheses/H4-vulnerability-heatmap.png
-    ncols: 2
-    levels:
-      costs:
-        # - All people pay the same amount
-        # - People pay proportionally to their income
-        - People & companies being protected by protective measures
-        # - People pay proportionally to their CO2 emissions
-        # - Companies pay proportionally to their CO2 emissions
-      exemptions:
-        # - No groups exempted from costs
-        # - Low-income earners exempted from costs
-        # - Low- and middle-income earners exempted from costs
-      benefits:
-        - Equal protection levels for all municipalities
-        - Municipalities most affected by natural hazards even if they are economically declining
-        # - Economically prosperous municipalities
-        # - Municipalities in which people have lived in for many years should be protected at all costs
-        # - Culturally valuable municipalities e.g. with historic buildings
+# plot robustness and plot comparison of different model complexities
 analysis:
   hdi_prob: 0.89
-  robustness:
-    prior_sensitivity:
+  robustness: # robustness plots based on comparison of main model and the altered models
+    prior_sensitivity: # choice of priors test
       runs:
       - main
-      - prior_factor_1
-      - prior_factor_4
+      - prior_factor_half
+      - prior_factor_double
       labels:
         main: Full HCM
-        prior_factor_1: Stronger regularizing priors
-        prior_factor_4: Less regularizing priors
-      colors:
-      - '#1F2022'
-      - '#01665e'
-      - '#542788'
-      alphas:
-      - 0.9
-      - 0.6
-      - 0.6
+        prior_factor_half: Stronger regularizing priors
+        prior_factor_double: Less regularizing priors
       quantities:
       - pre
       - shift
-    language:
+    language: # compare only german-speaking subsample with full sample
       runs:
       - main
       - german
@@ -280,7 +303,7 @@ analysis:
       expected_n_respondents:
         main: 526
         german: 316
-    age:
+    age: # compare "older" group sample with full sample
       runs:
       - main
       - older_35
@@ -290,7 +313,7 @@ analysis:
       quantities:
       - pre
       - shift
-    acceptance:
+    acceptance: # compare more consitent respondents with full sample (including more inconsistently anwering respondents)
       runs:
       - main
       - acceptance_consistent
@@ -300,7 +323,7 @@ analysis:
       quantities:
       - pre
       - shift
-    without_fv:
+    without_fv: # compare a model design exluding financial vulnerability as latent construt with complete model
       runs:
       - main
       - without_fv
@@ -310,7 +333,7 @@ analysis:
       quantities:
       - pre
       - shift
-    without_company_pay_prop:
+    without_company_pay_prop: # compare subsmple without choices including companies pay proportionally to their co2 emissions with full sample 
       runs:
       - main
       - without_company_pay_prop
@@ -320,17 +343,19 @@ analysis:
       quantities:
       - pre
       - shift
-
       exclude_levels:
         costs:
         - Companies pay proportionally to their CO2 emissions
-
       recenter_selected_levels: true
-  comparisons:
+  comparisons: # different model complexities (simple choice model, mixed_logit model (time variant) and hybrid choice model (including latent factors on with, one without FV))
     choice_baselines:
     - main
     - simple
     - mixed_logit
+    - without_fv
+
+
+# Geography information for plotting the maps and assigning respondents to cantons/communes
 geography:
   boundaries: resources/swissBOUNDARIES3D_1_5_LV95_LN02.gpkg
   localities: resources/AMTOVZ_CSV_WGS84.csv
@@ -348,25 +373,25 @@ geography:
     canton: kantonsnummer
     name: name
   respondent_postal_column: S0_postal_code_1_TEXT
-  respondent_municipality_column: null
-  respondent_locality_column: null
-  overrides: null
-  small_sample_threshold: 20
-  event_marker:
+  small_sample_threshold: 20 # override for higher cantonal thresholds
+
+  event_marker: # Blatten location
     longitude: 7.816378462880258
     latitude: 46.41984127890122
     label: Blatten
-  data_version_note: Set the edition/date of the two local geodata files here.
+
+
+# Definitions of the plotted maps
 maps:
   survey_source: analysis
+  # Survey answers directly plotted as map
   survey:
     respondent_count:
-      type: count
+      type: count # sum of survey residents per canton
       label: Respondents in analysis sample
-      cmap: Purples
       vmin: 0
     blatten_solidarity:
-      type: survey
+      type: survey # nummeric columns are analyzed
       columns:
       - S1_donated_blatten
       - S1_volunteered_blatten
@@ -375,9 +400,8 @@ maps:
       vmin: 0
       vmax: 1
       vcenter: 0.5
-      cmap: purple_brown
     prosocial_any:
-      type: survey
+      type: survey # nummeric columns are analyzed
       columns:
       - S1_donated_blatten
       - S1_volunteered_blatten
@@ -388,102 +412,44 @@ maps:
       vmin: 0
       vmax: 1
       vcenter: 0.5
-      cmap: purple_brown
+  
+  # Posterior results plotted as map 
   posterior:
-    costs_pre:
-      type: utility
-      run: main
-      attribute: costs
-      quantity: pre
-      title: Costs
-      colorbar_label: Pre utility
-      center_zero: true
-      cmap: purple_brown
-    costs_post:
-      type: utility
-      run: main
-      attribute: costs
-      quantity: post
-      title: Costs
-      colorbar_label: Post utility
-      center_zero: true
-      cmap: purple_brown
     costs_shift:
-      type: utility
+      type: utility # personal utility shift
       run: main
       attribute: costs
       quantity: shift
       title: Costs
       colorbar_label: Shift utility
       center_zero: true
-      cmap: purple_brown
-    exemptions_pre:
-      type: utility
-      run: main
-      attribute: exemptions
-      quantity: pre
-      title: Exemptions
-      colorbar_label: Pre utility
-      center_zero: true
-      cmap: purple_brown
-    exemptions_post:
-      type: utility
-      run: main
-      attribute: exemptions
-      quantity: post
-      title: Exemptions
-      colorbar_label: Post utility
-      center_zero: true
-      cmap: purple_brown
     exemptions_shift:
-      type: utility
+      type: utility # personal utility shift
       run: main
       attribute: exemptions
       quantity: shift
       title: Exemptions
       colorbar_label: Shift utility
       center_zero: true
-      cmap: purple_brown
-    benefits_pre:
-      type: utility
-      run: main
-      attribute: benefits
-      quantity: pre
-      title: Benefits
-      colorbar_label: Pre utility
-      center_zero: true
-      cmap: purple_brown
-    benefits_post:
-      type: utility
-      run: main
-      attribute: benefits
-      quantity: post
-      title: Benefits
-      colorbar_label: Post utility
-      center_zero: true
-      cmap: purple_brown
     benefits_shift:
-      type: utility
+      type: utility # personal utility shift
       run: main
       attribute: benefits
       quantity: shift
       title: Benefits
       colorbar_label: Shift utility
       center_zero: true
-      cmap: purple_brown
     eta_nhv:
-      type: trait
+      type: trait  # personal latent trait
       run: main
       variable: eta_nhv
       label: Mean latent natural-hazard vulnerability
       colorbar_label: Mean latent natural-hazard vulnerability
       center_zero: true
-      cmap: purple_brown
     eta_pd:
-      type: trait
+      type: trait  # personal latent trait
       run: main
       variable: eta_pd
       label: Mean latent psychological closeness
       colorbar_label: Mean latent psychological closeness
       center_zero: true
-      cmap: purple_brown

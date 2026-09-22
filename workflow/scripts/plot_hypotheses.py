@@ -1,31 +1,30 @@
 """Thin Snakemake entry point for one H1-H4 hypothesis figure."""
 
 from pathlib import Path
-import sys
-
 import matplotlib
 matplotlib.use("Agg")
 
 import arviz as az
 
+# import sys
+# SNAKEMAKE = globals().get("snakemake")
+# if SNAKEMAKE is not None:
+#     REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
+# else:
+#     REPO_ROOT = Path.cwd()
 
-SNAKEMAKE = globals().get("snakemake")
-if SNAKEMAKE is not None:
-    REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
-else:
-    REPO_ROOT = Path.cwd()
-
-sys.path.insert(0, str(REPO_ROOT / "src"))
+# sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from natural_hazard_solidarity.hypothesis_plots import plot_hypothesis
 from natural_hazard_solidarity.plotting import save_figure
 
 
-def main(snakemake) -> None:
-    idata = az.from_netcdf(snakemake.input.model)
+def main(s) -> None:
+    idata = az.from_netcdf(s.input.model)
 
-    figure_config = snakemake.params.figure
-    conjoint_config = snakemake.params.conjoint
+    figure_config = dict(s.params.figure)
+    figure_config.setdefault("hdi_prob", float(s.params.hdi_prob))
+    conjoint_config = s.params.conjoint
 
     hypothesis = figure_config["hypothesis"]
 
@@ -36,14 +35,14 @@ def main(snakemake) -> None:
         plot_config=figure_config,
     )
 
-    save_figure(fig, snakemake.output.figure)
+    save_figure(fig, s.output.figure)
 
-    table_path = Path(snakemake.output.table)
+    table_path = Path(s.output.table)
     table_path.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(table_path, index=False)
 
-    print(f"Saved {hypothesis}: {snakemake.output.figure}")
-    print(f"Saved table: {snakemake.output.table}")
+    print(f"Saved {hypothesis}: {s.output.figure}")
+    print(f"Saved table: {s.output.table}")
 
 
 if __name__ == "__main__":

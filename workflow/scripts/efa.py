@@ -1,12 +1,11 @@
 """Reproduce the requested EFA and construct-correlation figures."""
 from pathlib import Path
-import sys
-
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.efa import (
     complete_efa_items,
     fit_efa,
@@ -23,7 +22,7 @@ def main(s):
     save_figure(correlation_fig, s.output.correlation, dpi=600)
     results, diagnostics = fit_efa(attributes)
     efa_fig = plot_efa_comparison(results)
-    save_figure(efa_fig, s.output.efa, dpi=600)
+    save_figure(efa_fig, s.output.comparison, dpi=600)
 
     print(
         "EFA:",
@@ -35,10 +34,10 @@ def main(s):
     # Useful numerical companions are deliberately kept as rule outputs.
     Path(s.output.correlation_table).parent.mkdir(parents=True, exist_ok=True)
     correlation.to_csv(s.output.correlation_table)
-    results[2]["loadings"].to_csv(s.output.loadings2)
-    results[3]["loadings"].to_csv(s.output.loadings3)
-    results[2]["phi_df"].to_csv(s.output.phi2)
-    results[3]["phi_df"].to_csv(s.output.phi3)
+    results[2]["loadings"].to_csv(s.output.loadings_2)
+    results[3]["loadings"].to_csv(s.output.loadings_3)
+    results[2]["phi_df"].to_csv(s.output.phi_2)
+    results[3]["phi_df"].to_csv(s.output.phi_3)
 
 
 if __name__ == "__main__":

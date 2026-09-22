@@ -1,18 +1,18 @@
 """Thin Snakemake entry point for geographic assignment and canton maps."""
 from pathlib import Path
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 
-SNAKEMAKE = globals().get("snakemake")
-if SNAKEMAKE is not None:
-    REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
-else:
-    REPO_ROOT = Path.cwd()
+# import sys
+# SNAKEMAKE = globals().get("snakemake")
+# if SNAKEMAKE is not None:
+#     REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
+# else:
+#     REPO_ROOT = Path.cwd()
 
-sys.path.insert(0, str(REPO_ROOT / "src"))
+# sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from natural_hazard_solidarity.maps import (
     assign_cantons,
@@ -38,13 +38,8 @@ def run_assignment(s):
     )
     lookup = build_canton_lookup(localities, municipalities, cfg)
 
-    overrides = None
-    if s.input.overrides:
-        overrides = pd.read_csv(
-            s.input.overrides[0], dtype={"respondent_id": str}
-        )
 
-    assignment = assign_cantons(metadata, lookup, cfg, overrides)
+    assignment = assign_cantons(metadata, lookup, cfg)
     assignment_path = Path(s.output.assignments)
     assignment_path.parent.mkdir(parents=True, exist_ok=True)
     assignment.to_parquet(assignment_path, index=False)

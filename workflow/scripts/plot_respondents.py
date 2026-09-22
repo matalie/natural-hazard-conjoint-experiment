@@ -1,11 +1,11 @@
 """Thin Snakemake entry point for respondent-level HCM figures."""
 from pathlib import Path
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.posterior import level_shift_decomposition
 from natural_hazard_solidarity.respondent_plots import (
     plot_latent_constructs,

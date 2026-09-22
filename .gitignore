@@ -2,6 +2,9 @@
 resources/
 results/
 notebooks/
+tools/
+tests/
+docs/
 *.csv
 *.png
 *.nc

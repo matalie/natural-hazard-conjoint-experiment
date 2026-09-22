@@ -146,10 +146,10 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
         if include_financial_vulnerability:
             fv_data = pm.Data("fv_data", data["fv_z"], dims="respondent")
 
-        eta_nhv = pm.Normal("eta_nhv", 0, 0.3 * factor, dims="respondent")
-        eta_pd = pm.Normal("eta_pd", 0, 0.3 * factor, dims="respondent")
-        loading_nhv = pm.HalfNormal("loading_nhv", 0.5 * factor, dims="nhv_item")
-        loading_pd = pm.HalfNormal("loading_pd", 0.5 * factor, dims="pd_item")
+        eta_nhv = pm.Normal("eta_nhv", 0, 0.6 * factor, dims="respondent")
+        eta_pd = pm.Normal("eta_pd", 0, 0.6 * factor, dims="respondent")
+        loading_nhv = pm.HalfNormal("loading_nhv", 1 * factor, dims="nhv_item")
+        loading_pd = pm.HalfNormal("loading_pd", 1 * factor, dims="pd_item")
         likert_sigma = pm.HalfNormal("likert_sigma", 0.5)
 
         for index in range(len(coords["nhv_item"])):
@@ -169,21 +169,21 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
                 dims="respondent",
             )
 
-        alpha = pm.Normal("alpha", mu=0.0, sigma=0.3 * factor)
-        partworth_mean = pm.Normal("partworth_mean", mu=0.0, sigma=0.3 * factor, dims="level")
-        partworth_sd = pm.HalfNormal("partworth_sd", 0.5 * factor, dims="level")
+        alpha = pm.Normal("alpha", mu=0.0, sigma=0.6 * factor)
+        partworth_mean = pm.Normal("partworth_mean", mu=0.0, sigma=0.6 * factor, dims="level")
+        partworth_sd = pm.HalfNormal("partworth_sd", 1 * factor, dims="level")
         partworth_z = pm.Normal(
             "partworth_z",
             mu=0.0,
-            sigma=0.3 * factor,
+            sigma=0.6 * factor,
             dims=("respondent", "level"),
         )
-        gamma_nhv = pm.Normal("gamma_nhv", mu=0.0, sigma=0.2 * factor, dims="level")
-        gamma_pd = pm.Normal("gamma_pd", mu=0.0, sigma=0.2 * factor, dims="level")
+        gamma_nhv = pm.Normal("gamma_nhv", mu=0.0, sigma=0.4 * factor, dims="level")
+        gamma_pd = pm.Normal("gamma_pd", mu=0.0, sigma=0.4 * factor, dims="level")
 
         pre = partworth_mean + partworth_z * partworth_sd + gamma_nhv * eta_nhv[:, None] + gamma_pd * eta_pd[:, None]
         if include_financial_vulnerability:
-            gamma_fv = pm.Normal("gamma_fv", mu=0.0, sigma=0.2 * factor, dims="level")
+            gamma_fv = pm.Normal("gamma_fv", mu=0.0, sigma=0.4 * factor, dims="level")
             pre = pre + gamma_fv * fv_data[:, None]
 
         partworth_individual = pm.Deterministic(
@@ -192,12 +192,12 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
             dims=("respondent", "level"),
         )
 
-        shift_mean = pm.Normal("shift_mean", mu=0.0, sigma=0.3 * factor, dims="level")
-        shift_nh = pm.Normal("shift_nh", mu=0.0, sigma=0.2 * factor, dims="level")
-        shift_psy = pm.Normal("shift_psy", mu=0.0, sigma=0.2 * factor, dims="level")
+        shift_mean = pm.Normal("shift_mean", mu=0.0, sigma=0.6 * factor, dims="level")
+        shift_nh = pm.Normal("shift_nh", mu=0.0, sigma=0.4 * factor, dims="level")
+        shift_psy = pm.Normal("shift_psy", mu=0.0, sigma=0.4 * factor, dims="level")
         shift = shift_mean + shift_nh * eta_nhv[:, None] + shift_psy * eta_pd[:, None]
         if include_financial_vulnerability:
-            shift_fin = pm.Normal("shift_fin", mu=0.0, sigma=0.2 * factor, dims="level")
+            shift_fin = pm.Normal("shift_fin", mu=0.0, sigma=0.4 * factor, dims="level")
             shift = shift + shift_fin * fv_data[:, None]
 
         shift_individual = pm.Deterministic(
@@ -224,3 +224,49 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
     return model
 
 
+def fit_model(frame, run, sampling, conjoint_config, constructs, max_cores=1):
+    """Fit one configured model and return posterior data plus prepared model data."""
+    import pymc as pm
+
+    family = run.get("family", "hcm")
+    data = prepare_model_data(
+        frame, conjoint_config, constructs,
+        include_constructs=(family == "hcm"),
+    )
+
+    if family == "hcm":
+        model = build_hcm(
+            data,
+            run.get("prior_factor", 1.0),
+            run.get("include_financial_vulnerability", True),
+        )
+    elif family == "simple":
+        model = build_simple_choice_model(data)
+    elif family == "mixed_logit":
+        model = build_longitudinal_mixed_logit(data)
+    else:
+        raise ValueError(f"Unknown model family: {family}")
+
+    cores = min(int(max_cores), int(sampling["chains"]))
+    blas_threads = int(sampling.get("blas_threads_per_chain", 1))
+    if blas_threads != 1:
+        raise ValueError("Keep blas_threads_per_chain=1.")
+
+    with model:
+        idata = pm.sample(
+            draws=sampling["draws"], tune=sampling["tune"],
+            chains=sampling["chains"], cores=cores,
+            blas_cores=cores * blas_threads,
+            init=sampling.get("init", "jitter+adapt_diag"),
+            random_seed=sampling["random_seed"],
+            target_accept=sampling["target_accept"],
+            progressbar=sampling.get("progressbar", True),
+            return_inferencedata=True,
+            idata_kwargs={"log_likelihood": sampling.get("log_likelihood", True)},
+        )
+
+    divergences = np.asarray(idata.sample_stats["diverging"].sum("draw").values, dtype=int)
+    if divergences.sum() > 0:
+        raise RuntimeError(f"Model has {int(divergences.sum())} post-tuning divergences by chain: {divergences.tolist()}.")
+
+    return idata, data

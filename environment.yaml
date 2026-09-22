@@ -1,20 +1,38 @@
 # Application environment. Windows compiler is supplied by local MSYS2 (launcher).
-# This preserves the PyMC-5 / ArviZ-0.x API used by the legacy code.
+name: natural-hazard-solidarity
+
 channels:
   - conda-forge
+  - bioconda
   - nodefaults
+
 dependencies:
   - python=3.12
+  - snakemake=9.25.1
+
+  # Core analysis
   - numpy>=1.26,<3
   - pandas=2.2.*
   - scipy
   - pyarrow
   - matplotlib
   - xarray
+  - pyyaml
+
+  # Bayesian models
   - pymc=5.28.5
   - arviz=0.23.4
-  - pytensor<3
   - h5netcdf
   - h5py
+
+  # Tests
   - pytest
-  - pyyaml
+
+  # EFA
+  - scikit-learn=1.5.2
+  - factor-analyzer=0.5.1
+
+  # Maps
+  - geopandas=1.1.*
+  - pyogrio
+  - shapely

@@ -1,8 +1,8 @@
 """LOO for identical observations only; not a ranking of different respondent subsamples."""
 from pathlib import Path
-import sys
 import pandas as pd
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.posterior import validate_model_comparison
 
 

@@ -14,7 +14,7 @@ import pandas as pd
 
 from .data_preparation import filter_model_sample
 from .posterior import (check_model_coding, get_level_draws, quantity_da, summarize_draws)
-from .plotting import (LEVEL_ORDER, ATTRIBUTE_ORDER, plot_forest_panels, PURPLE, DARK_GREY)
+from .plotting import (ATTRIBUTE_ORDER, LEVEL_ORDER, ROBUSTNESS_ALPHAS, ROBUSTNESS_COLORS, plot_forest_panels)
 
 def _model_n_respondents(idata) -> int:
     value = idata.posterior.attrs.get("n_respondents")
@@ -309,10 +309,10 @@ def plot_robustness(
     Returns ``(figure, summary_table)``. File writing belongs to the workflow wrapper.
     """
     run_names = list(specification["runs"])
-    colours = list(specification.get("colors", [DARK_GREY, DARK_GREY, PURPLE]))
-    alphas = list(specification.get("alphas", [1.0, 0.35, 0.8]))
-    if len(colours) < len(run_names) or len(alphas) < len(run_names):
-        raise ValueError("Provide one color and alpha per robustness run.")
+    if len(run_names) > len(ROBUSTNESS_COLORS):
+        raise ValueError("Not enough predefined robustness styles for the configured runs.")
+    colours = list(ROBUSTNESS_COLORS[:len(run_names)])
+    alphas = list(ROBUSTNESS_ALPHAS[:len(run_names)])
 
     selected_levels = resolve_plot_levels(specification, conjoint_config)
     attr_order = [attr for attr in ATTRIBUTE_ORDER if attr in selected_levels]
