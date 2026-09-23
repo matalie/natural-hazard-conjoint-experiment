@@ -53,7 +53,6 @@ def regex_keys(mapping):
 include: "rules/data.smk"
 include: "rules/models.smk"
 include: "rules/analysis.smk"
-include: "rules/validation.smk"
 
 
 # ---------------------------------------------------------------------
