@@ -1,7 +1,7 @@
 """Bayesian choice models and model-fitting utilities.
 
 This module prepares validated model inputs and defines the three choice-model
-families used in the analysis: a simple multinomial choice model, a longitudinal
+families used in the analysis: a simple population-level choice model, a longitudinal
 mixed-logit model, and the main hybrid choice model (HCM).
 
 The HCM combines latent natural-hazard vulnerability and psychological distance

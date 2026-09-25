@@ -181,7 +181,7 @@ samples:
     operator: is_true
   without_company_pay_prop:
     type: exclude_tasks
-    conditions: # Exclude complete conjoint tasks containing the specified cost/exemption combination
+    conditions: # Exclude tasks containing the specified company-payment/no-exemption combination
       costs: Companies pay proportionally to their CO2 emissions
       exemptions: No groups exempted from costs
 
@@ -201,7 +201,7 @@ models:
       sample: full
       prior_factor: 2 # Multiply prior scales by 2 (weaker regularization)
       include_financial_vulnerability: true
-    without_fv:  # Compare the full HCM with a specification excluding financial vulnerability
+    without_fv:  # Compare the full HCM with a specification excluding observed financial vulnerability
       sample: full
       include_financial_vulnerability: false
     german:

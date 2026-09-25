@@ -157,28 +157,39 @@ results/
 
 ## Workflow overview
 
-The main workflow follows approximately this dependency structure:
-
-The main analysis flow is:
+The main analysis flow is approximately:
 
 ```mermaid
 flowchart TD
-
-    A[Raw survey data] --> B[Preprocessing]
+    A[Raw survey data] --> B[Clean and link survey waves]
     B --> C[Analysis sample]
     C --> D[Conjoint encoding]
 
     C --> E[Descriptive analyses]
-    C --> F[EFA / latent constructs]
+    C --> F[Exploratory factor analysis]
 
-    D --> G[Main Bayesian model]
+    D --> G[Main HCM]
+    D --> R[Robustness HCM fits]
+    D --> Q[Baseline choice models]
 
     G --> H[Hypothesis analyses]
     G --> I[Diagnostics]
-    G --> J[Posterior maps]
     G --> K[Respondent-level analyses]
-    G --> L[Robustness models]
-    L --> M[Model comparison]
+
+    G --> S[Robustness comparisons]
+    R --> S
+
+    G --> M[Model comparison]
+    R --> M
+    Q --> M
+
+    B --> GEO[Geographic assignment]
+    C --> SM[Survey maps]
+    GEO --> SM
+
+    G --> PM[Posterior maps]
+    C --> PM
+    GEO --> PM
 ```
 
 Snakemake tracks these dependencies automatically. If an upstream input

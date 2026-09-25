@@ -350,10 +350,9 @@ def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6)
 
 
 def _fallback_between_waves(df, items, target, source, lo=1, hi=6):
-    """Fallback_fill: fill missing latent construct items of respondents between
-    waves in case <= 1/3 is missing.
-    If requested, a respondent-level audit table records retention and the
-    number of values filled at each imputation stage."""
+    """Fill remaining missing construct items from the same item in the other survey wave.
+    Existing target-wave responses are preserved; only missing values are replaced.
+    """
     out = df.copy()
     for item in items:
         target_col, source_col = target + item, source + item
@@ -375,6 +374,8 @@ def prepare_analysis_sample(df, item_config, imputation_config, acceptance_confi
     The function also derives a conjoint response-consistency indicator by
     comparing each stated preference with the acceptance ratings of the two
     alternatives.
+    If requested, a respondent-level audit table records sample retention and
+    the number of values filled at each imputation stage.
     """
     out = df.copy()
     lo, hi = imputation_config["likert_min"], imputation_config["likert_max"]
