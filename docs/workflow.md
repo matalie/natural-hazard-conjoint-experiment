@@ -36,6 +36,7 @@ run_workflow.bat -n
 
 | Target | Purpose | Main outputs |
 |---|---|---|
+|`conjoint_data`| Preprocess survey data + create conjoint dataset | `results/data/conjoint_(effect|dummy).parquet` |
 | `main_model` | Fit the main Bayesian conjoint model | `results/models/main.nc` |
 | `hypotheses` | Generate H1-H4 analyses | `results/figures/hypotheses/`, `results/tables/hypotheses/` |
 | `requested_plots` | Generate descriptive and exploratory figures | `results/figures/` |

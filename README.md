@@ -139,7 +139,7 @@ Snakemake automatically determines which files are missing or outdated and runs 
 Individual parts of the workflow can also be run separately:
 
 ```cmd
-run_workflow.bat preprocess
+run_workflow.bat conjoint_data
 run_workflow.bat main_model
 run_workflow.bat hypotheses
 run_workflow.bat requested_plots
@@ -307,13 +307,6 @@ run_workflow.bat -n
 
 ```cmd
 run_workflow.bat hypotheses
-```
-
-4. Check the generated outputs.
-5. Run the project tests:
-
-```cmd
-run_workflow.bat check
 ```
 
 6. Before committing larger changes, verify the complete workflow:

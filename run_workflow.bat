@@ -5,7 +5,6 @@ rem Run the Snakemake workflow from the repository root.
 rem Usage examples:
 rem   run_workflow.bat
 rem   run_workflow.bat main_model
-rem   run_workflow.bat check
 rem   run_workflow.bat -n
 rem
 rem The script:

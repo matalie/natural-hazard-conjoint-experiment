@@ -24,10 +24,7 @@ dependencies:
   - arviz=0.23.4
   - h5netcdf
   - h5py
-
-  # Tests
-  - pytest
-
+  
   # EFA
   - scikit-learn=1.5.2
   - factor-analyzer=0.5.1

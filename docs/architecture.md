@@ -6,87 +6,26 @@ This document explains how the repository layers communicate. The dependency dir
 
 ```mermaid
 flowchart TB
-    USER[User / run_workflow.bat] --> SNAKE[workflow/Snakefile]
+    USER[User] --> RUN[run_workflow.bat]
+    LOCAL[local_settings.bat] --> RUN
+    RUN --> SNAKE[workflow/Snakefile]
+
     CFG[config/config.yaml] --> SNAKE
-    INPUTS[resources/*] --> RULES[workflow/rules/*.smk]
-    SNAKE --> RULES
+    SNAKE --> RULES[workflow/rules/*.smk]
+
+    INPUTS[resources/*] --> RULES
+
     RULES --> SCRIPTS[workflow/scripts/*.py]
     SCRIPTS --> SRC[src/natural_hazard_solidarity/*.py]
+
     SRC --> DATA[data_preparation.py / mappings.py]
     SRC --> MODELS[models.py]
     SRC --> POST[posterior.py]
     SRC --> PLOTS[plotting.py + analysis/plot modules]
+
     SCRIPTS --> RESULTS[results/*]
-    TESTS[tests/*] --> SRC
 ```
 
-## Workflow DAG
-
-```mermaid
-flowchart LR
-    subgraph Inputs[Local inputs]
-      S0[Raw S0 survey CSV]
-      S1[Raw S1 survey CSV]
-      IDS[id_list.csv]
-      GEO1[Swiss boundary GPKG]
-      GEO2[Locality CSV]
-    end
-
-    subgraph Preprocessing[Preprocessing]
-      CLEAN[clean_surveys]
-      COMBINED[combined_surveys.parquet]
-      SAMPLE[analysis_sample]
-      ANALYSIS[analysis_sample.parquet]
-      CONJ[conjoint_data]
-      CONJOINT[conjoint_effect/dummy.parquet]
-    end
-
-    S0 --> CLEAN
-    S1 --> CLEAN
-    IDS --> CLEAN
-    CLEAN --> COMBINED --> SAMPLE --> ANALYSIS --> CONJ --> CONJOINT
-
-    subgraph Models[Models]
-      FIT[fit_model {run}]
-      NC[models/{run}.nc]
-      COMP[compare_models]
-    end
-    CONJOINT --> FIT --> NC --> COMP
-
-    subgraph Analyses[Figures and tables]
-      DESC[descriptive plots]
-      EFA[EFA]
-      HYP[plot_hypothesis]
-      RESP[plot_respondents]
-      DIAG[plot_diagnostics]
-      ROB[analyze_robustness]
-    end
-    ANALYSIS --> DESC
-    ANALYSIS --> EFA
-    NC --> HYP
-    NC --> RESP
-    NC --> DIAG
-    NC --> ROB
-    CONJOINT --> ROB
-
-    subgraph Geography[Geographic branch]
-      ASSIGN[assign_geography]
-      ASSIGNMENTS[respondent_geography.parquet]
-      SMAP[plot_survey_map]
-      PMAP[plot_posterior_map]
-    end
-    COMBINED --> ASSIGN
-    GEO1 --> ASSIGN
-    GEO2 --> ASSIGN
-    ASSIGN --> ASSIGNMENTS
-    ANALYSIS --> SMAP
-    ASSIGNMENTS --> SMAP
-    GEO1 --> SMAP
-    NC --> PMAP
-    ANALYSIS --> PMAP
-    ASSIGNMENTS --> PMAP
-    GEO1 --> PMAP
-```
 
 ## Practical rule for contributors
 
