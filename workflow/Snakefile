@@ -18,9 +18,9 @@ ROOT = config["project"]["output_root"].rstrip("/\\").replace("\\", "/")
 # affected outputs when analysis code changes.
 SRC = "src/natural_hazard_solidarity/"
 
-CODING = config["conjoint"]["coding"]
-RUNS = config["models"]["runs"]
-HDI = config["analysis"]["hdi_prob"]
+CODING = config["conjoint"]["coding"] # effect or dummy coding for the whole workflow
+RUNS = config["models"]["runs"] # the different modelconfigurations that are defined to run (incl. robustness check models and simpler models)
+HDI = config["analysis"]["hdi_prob"] # Report 89% highest-density intervals for posterior estimates
 
 
 # ---------------------------------------------------------------------

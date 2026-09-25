@@ -1,4 +1,4 @@
-"""Presentation only: legacy colours/order and the later agreed serif/half-density style."""
+"""General plotting functions"""
 from pathlib import Path
 import textwrap
 import matplotlib as mpl

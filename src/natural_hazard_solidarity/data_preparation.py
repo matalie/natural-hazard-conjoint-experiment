@@ -1,6 +1,5 @@
-"""Legacy cleaning, item-wise imputation, choice design and sample filters.
+"""Survey data preparation inlcuding cleaning, item-wise imputation, choice design and sample filters.
 
-Source: prepare_data.ipynb and helpers/f_statistics.py in uploaded old repository.
 """
 from __future__ import annotations
 import re
@@ -10,7 +9,7 @@ import pandas as pd
 from . import mappings as mp
 
 def _remove_bad_quality(df: pd.DataFrame) -> pd.DataFrame:
-    """prepare_data.ipynb cell 7: same three exclusion criteria as legacy."""
+    """Exclude respondents with bad finishing flags"""
     required = ["DistributionChannel", "Finished", "Q_TerminateFlag"]
     missing = [c for c in required if c not in df]
     if missing:
@@ -54,11 +53,7 @@ def _standardize_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     return out
 
-def _duration_invalid_mask(
-    df: pd.DataFrame,
-    lower_quantile: float | None,
-    upper_quantile: float | None,
-) -> pd.Series:
+def _duration_invalid_mask(df: pd.DataFrame, lower_quantile: float | None, upper_quantile: float | None,) -> pd.Series:
     if "duration" not in df.columns:
         raise KeyError("Missing survey duration column.")
 
@@ -126,10 +121,11 @@ def _drop_sensitive_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=columns, errors="ignore")
 
 def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
-    """Clean one raw survey wave using the logic from prepare_data.ipynb."""
+    """Clean one raw survey wave"""
     out = _standardize_raw_columns(df)
     out = _remove_bad_quality(out)
 
+    # Quality exclusions are applied before item recoding and wave merging.
     duration_config = config["duration"][wave]
     invalid_duration = _duration_invalid_mask(
         out,
@@ -156,6 +152,7 @@ def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
     out = map_values(out, mp.LIKERT_MAP, mp.VALID_COLUMNS, numeric=True)
     out = map_values(out, mp.NH_EXPERIENCE_MAP, ["experience_nh"], numeric=True)
 
+    # Reverse-code financial vulnerability so that larger values consistently represent greater financial vulnerability.
     if "finan_vulnerability_1" in out.columns:
         out["finan_vulnerability_1"] = 7 - pd.to_numeric(
             out["finan_vulnerability_1"], errors="coerce"
@@ -202,7 +199,6 @@ def merge_waves(
         .drop(columns=["S0_id", "S0_m", "S1_id", "S1_m"], errors="ignore")
     )
     merged = merged.drop_duplicates(subset=[key_s0, key_s1], keep="first").reset_index(drop=True)
-    # Legacy numbering retained unless a persistent pseudonymous ID is supplied.
     id_col = config.get("respondent_id_column")
     if id_col:
         if id_col not in merged or merged[id_col].isna().any() or merged[id_col].duplicated().any():
@@ -312,7 +308,7 @@ def filter_model_sample(df: pd.DataFrame, sample_config: dict) -> pd.DataFrame:
 
 
 def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6):
-    """Legacy within-construct fill; an integer threshold avoids 0.67 rounding."""
+    """Impute latent factor item values using remaining factor items if <= 1/3 ist missing"""
     columns = [prefix + item for item in items]
     if not 1 <= min_items <= len(columns):
         raise ValueError("min_items must be between 1 and the number of items.")
@@ -323,14 +319,14 @@ def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6)
     if method not in {"median", "mean"}:
         raise ValueError("Imputation method must be median or mean.")
     center = getattr(values, method)(axis=1)
-    center = np.floor(center + 0.5).clip(lo, hi)  # legacy round-half-up
+    center = np.floor(center + 0.5).clip(lo, hi)
     values.loc[eligible] = values.loc[eligible].T.fillna(center.loc[eligible]).T
     out[columns] = values
     return out
 
 
 def _fallback_between_waves(df, items, target, source, lo=1, hi=6):
-    """Legacy fallback_fill: fill only missing ITEMS, never overwrite observations."""
+    """Fallback_fill: fill missing latent construct items of respondents between waves in case <= 1/3 is missing"""
     out = df.copy()
     for item in items:
         target_col, source_col = target + item, source + item
@@ -341,11 +337,17 @@ def _fallback_between_waves(df, items, target, source, lo=1, hi=6):
 
 
 def prepare_analysis_sample(df, item_config, imputation_config, acceptance_config, *, return_audit=False):
-    """Exact legacy sequence (prepare_data.ipynb cells 18-22), per construct.
+    """Prepare the respondent-level analysis sample.
 
-    NHV/FV within S0 -> within S1 -> item-wise S1 to S0 -> S0 to S1;
-    PD within S1; finally complete cases on the original required items.
-    A one-item NHV response is NOT overwritten by the other wave.
+    Missing NHV and financial-vulnerability items are first imputed within
+    construct and wave and, if still missing, from the corresponding item in
+    the other survey wave. Psychological-distance items are imputed within S1
+    only. Respondents with incomplete or invalid construct information after
+    imputation are excluded.
+
+    The function also derives a conjoint response-consistency indicator by
+    comparing each stated preference with the acceptance ratings of the two
+    alternatives.
     """
     out = df.copy()
     lo, hi = imputation_config["likert_min"], imputation_config["likert_max"]
@@ -413,7 +415,7 @@ def validate_choice_tasks(df, left_option=1, right_option=2):
 
 
 def build_conjoint_long(df, config):
-    """Legacy wide-to-long design; join metadata AFTER reshaping, never drop missing demographics."""
+    """Create conjoint dataframe"""
     if df["respondent_id"].isna().any() or df["respondent_id"].duplicated().any():
         raise ValueError("One unique non-missing respondent_id per input row is required.")
     attribute_columns = df.filter(regex=r"^S\d+_choice\d+_(costs|benefits|exemptions)\d+$").columns.tolist()
@@ -446,7 +448,17 @@ def design_columns(conjoint_config):
 
 
 def encode_conjoint(df, config):
-    """Fixed level order. Missing/unknown attributes are errors, not implicit baselines."""
+    """Encode categorical conjoint attributes for model estimation.
+
+    Attribute levels and reference categories are defined in the conjoint
+    configuration.
+    - dummy coding represents the reference level by zeros,
+    - effect coding represents it by -1 across the non-reference columns so that
+    attribute-level coefficients sum to zero.
+
+    Values that are missing or not listed as valid levels in the configuration
+    raise an error instead of being treated as the reference category.
+    """
     coding = config["coding"]
     if coding not in {"effect", "dummy"}:
         raise ValueError("conjoint.coding must be effect or dummy.")

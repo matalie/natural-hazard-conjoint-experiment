@@ -1,10 +1,6 @@
-# Local data, outputs, and exploratory notebooks
+# Local data, outputs
 resources/
 results/
-notebooks/
-tools/
-tests/
-docs/
 *.csv
 *.png
 *.nc

@@ -1,4 +1,6 @@
-"""Thin Snakemake entry point for geographic assignment and canton maps."""
+"""Geographic analysis of model and survey data.
+
+Thin Snakemake entry point for geographic assignment and canton maps."""
 from pathlib import Path
 
 import matplotlib

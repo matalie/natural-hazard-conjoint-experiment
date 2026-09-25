@@ -1,4 +1,4 @@
-# Main configuration. Scientific and runtime choices live here.
+# Main configuration. Scientific and runtime choices are mostly set here
 # Specific output paths and plotting defaults (fonts, colors, colormaps, layout) are defined in the workflow/code.
 # One complete run must use one conjoint coding consistently ("effect" or "dummy").
 
@@ -22,13 +22,13 @@ data:
 
 # MCMC sampling settings used for model estimation
 sampling:
-  draws: 500                 # Retained posterior draws per chain after tuning
-  tune: 500                  # Warm-up/adaptation draws per chain, which are not retained
+  draws: 300                 # Retained posterior draws per chain after tuning (for the main run I used: 1500)
+  tune: 300                  # Warm-up/adaptation draws per chain, which are not retained (for the main run I used: 1500)
   chains: 4                   # Number of independent MCMC chains
-  cores: 2                    # Maximum number of chains sampled in parallel
+  cores: 2                    # Number of MCMC chains sampled concurrently (e.g. 4 chains + 2 cores = 2 chains at a time)
   blas_threads_per_chain: 1   # Numerical-library threads per chain (keep low to avoid oversubscription)
-  random_seed: 123            # Seed for reproducible sampling
-  target_accept: 0.95         # NUTS target acceptance rate (higher values are more conservative but slower)
+  random_seed: 123            # Random seed for reproducible initialization and MCMC sampling
+  target_accept: 0.95         # NUTS target acceptance probability: higher values use smaller step sizes and can help reduce divergences, but increase runtime
   progressbar: true           # Show sampling progress
   log_likelihood: true        # Store pointwise log likelihood, required for LOO model comparison
 
@@ -40,13 +40,12 @@ preprocessing:
   quality: # filters respondent based on attention check and straightlining
     attention_column: attention_check
     attention_valid_value: Agree
-    max_ids_per_ip: 2
+    max_ids_per_ip: 2 # only 2 survey responses from same ip address
     # Straightliner exclusion:
-    straightliner_mode: deservingness # OR
-    # "deservingness" = deservingness items only OR
-    # "medium"        = deservingness, identity, and GAL-TAN items OR 
-    # "all"           = all configured Likert groups, including NH sensitivity and psychological distance
-  duration: # filters speeders and slow respondents
+    straightliner_mode: deservingness # = deservingness items only OR
+                      # "medium"        = deservingness, identity, and GAL-TAN items OR 
+                      # "all"           = all configured Likert groups, including NH sensitivity and psychological distance
+  duration: # filters speeders and slow respondents based on quantiles
     S0:
       lower_quantile: 0.05
       upper_quantile: 0.95
@@ -56,7 +55,7 @@ preprocessing:
   
   # For latent construct creation: within-construct item imputation followed by cross-wave fallback for
   # natural-hazard and financial-vulnerability items.
-  imputation: # TODO
+  imputation:
     method: median
     likert_min: 1
     likert_max: 6
@@ -84,12 +83,12 @@ analysis_items:
 
 # Conjoint preparation
 conjoint:
-  coding: effect # "effect" or "dummy": use one coding consitently within one run, the dummy coding is not yet finally tested
-  left_option: 1
-  right_option: 2
-  # All possible attribute levels and the omitted baseline level.
+  coding: effect # "effect" or "dummy":  Main thesis analyses use effect coding. IMPORTANT: The dummy coding is not yet finally tested. Use one coding consitently within one run.
   # Effect coding: baseline coefficient is reconstructed from the non-baseline coefficients.
   # Dummy coding: baseline coefficient is fixed at zero.
+  left_option: 1
+  right_option: 2
+  # All possible attribute levels of the conjoint experiment and the omitted baseline level.
   attributes:
     costs:
       baseline: All people pay the same amount
@@ -113,6 +112,7 @@ conjoint:
       - Economically prosperous municipalities
       - Municipalities in which people have lived in for many years should be protected at all costs
       - Culturally valuable municipalities e.g. with historic buildings
+  
   # Respondent-level variables retained alongside the conjoint design for sample filtering, subgroup analyses, latent constructs, and plotting
   respondent_columns: 
   - respondent_id
@@ -150,7 +150,7 @@ constructs:
   financial_vulnerability: S0_finan_vulnerability_1
 
 # Model samples which are used depending on the case
-# Full sampel is used per default, for robustness testing, the subsamples are used
+# Full sample is used per default, for robustness testing, the subsamples are used
 samples:
   full:
     type: full
@@ -204,8 +204,7 @@ models:
       sample: german
       include_financial_vulnerability: true
       sampling:
-        tune: 500
-        target_accept: 0.99
+        target_accept: 0.99 # uses higher target accept 
         init: adapt_diag
     older_35:
       sample: older_35
@@ -225,6 +224,7 @@ models:
 
 # plot specifications
 plots:
+  # comparison of survey responses in the pre and post Blatten
   pre_post_distributions:
     distribution-climate-likert:
       title: 'Climate-change risk perception: pre vs. post'
@@ -256,6 +256,7 @@ plots:
     H4-vulnerability-heatmap:
       hypothesis: H4
       levels:
+        # only levels plotted that are 
         costs:
           # - All people pay the same amount
           # - People pay proportionally to their income
@@ -276,7 +277,7 @@ plots:
 
 # plot robustness and plot comparison of different model complexities
 analysis:
-  hdi_prob: 0.89
+  hdi_prob: 0.89 # Report 89% highest-density intervals for posterior estimates
   robustness: # robustness plots based on comparison of main model and the altered models
     prior_sensitivity: # choice of priors test
       runs:

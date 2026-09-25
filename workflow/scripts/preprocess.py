@@ -1,4 +1,4 @@
-"""Three coarse preprocessing stages; no notebooks, no sampling."""
+"""Preprocessing of the survey data"""
 from pathlib import Path
 import json
 import hashlib

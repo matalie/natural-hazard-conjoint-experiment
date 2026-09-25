@@ -1,4 +1,3 @@
-"""Legacy-faithful descriptive survey plots used in the thesis."""
 from __future__ import annotations
 
 from math import ceil
@@ -75,7 +74,6 @@ def plot_pre_post_likert(df: pd.DataFrame, spec: dict):
         mean_post = float(np.mean(post))
         ax.hist(pre, bins=LIKERT_BINS, color=PURPLE, alpha=0.45, label="S1 (pre)")
         ax.hist(post, bins=LIKERT_BINS, color=TEAL, alpha=0.45, label="S2 (post)")
-        # Legacy helper plotted both means by default (``meant=True``).
         ax.axvline(mean_pre, linestyle="--", linewidth=1.8, label="S1 mean", color=PURPLE)
         ax.axvline(mean_post, linestyle=":", linewidth=1.8, label="S2 mean", color=TEAL)
         ax.set_title(labels.get(item, item), fontsize=15)
@@ -172,7 +170,6 @@ def plot_deservingness_likert(
     return fig
 
 def plot_likert_shifts(df: pd.DataFrame):
-    """Legacy Likert-shifts plot: respondent-level Post - Pre changes."""
     items = [
         "sensitivity_nh_1",
         "sensitivity_nh_2",

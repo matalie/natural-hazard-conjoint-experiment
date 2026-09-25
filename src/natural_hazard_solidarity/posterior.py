@@ -1,6 +1,5 @@
-"""Posterior arithmetic only: no matplotlib and no Snakemake.
-
-HDIs are shortest contiguous sample intervals (legacy non-circular az.hdi).
+"""Posterior arithmetic only
+HDIs are shortest contiguous sample intervals
 Always form sums/group means DRAW BY DRAW before computing an interval.
 """
 from __future__ import annotations
@@ -11,9 +10,6 @@ import xarray as xr
 
 def posterior_interval(draws, hdi_prob=0.89, center="mean"):
     """Univariate mean/median and shortest sample interval, not equal-tail quantiles.
-
-    Matches ArviZ 0.x _hdi for finite non-circular 1-D draws and 0 < p < 1.
-    Local NumPy implementation keeps basic plotting independent of the ArviZ API.
     """
     if not 0 < hdi_prob < 1 or center not in {"mean", "median"}:
         raise ValueError("Use 0 < hdi_prob < 1 and center=mean or median.")
@@ -53,6 +49,8 @@ def check_model_coding(idata, conjoint_config):
 
 def get_level_da(da, attribute, level, conjoint_config):
     """Return a level utility with chain/draw/optional respondent dimensions intact."""
+    # Dummy coding: the omitted baseline is fixed at zero.
+    # Effect coding: coefficients within an attribute sum to zero, so the omitted baseline is reconstructed as minus the sum of non-baseline levels.
     spec = conjoint_config["attributes"][attribute]
     coding = conjoint_config["coding"]
     if coding not in {"effect", "dummy"}:
@@ -93,6 +91,12 @@ def build_level_summary_from_da(da, attr_order, levels_by_attr, conjoint_config,
     return pd.DataFrame(rows), draw_map
 
 
+"""Return pre-event utility, event-related shift, or post-event utility.
+
+Post-event utility is always constructed draw by draw as pre + shift.
+With individual=True, respondent-specific posterior quantities are returned;
+otherwise population-level coefficients are used.
+"""
 def quantity_da(idata, quantity, *, individual=False):
     post = idata.posterior
     if individual:
@@ -167,7 +171,7 @@ def validate_model_comparison(models):
 
 
 def compute_level_surface(idata, attr, level, conjoint_config, nhv_axis, fv_axis, quantity="shift", pd_fixed=0.0, hdi_prob=0.89):
-    """Legacy additive NHV/FV surface; constant memory per grid point."""
+    """Used for hypothesis 4 plotting heatmaps"""
     post = idata.posterior
     needed = {"shift": ["shift_mean", "shift_nh", "shift_fin", "shift_psy"],
               "pre": ["partworth_mean", "gamma_nhv", "gamma_fv", "gamma_pd"]}
@@ -203,11 +207,7 @@ def _summarize_draw_matrix(matrix, prefix, hdi_prob=0.89):
 
 
 def level_shift_decomposition(idata, attribute, level, conjoint_config, hdi_prob=0.89):
-    """Respondent-level decomposition of the HCM event shift for one conjoint level.
-
-    This is the migrated calculation behind the legacy ``respondent-impact-*``
-    figures. Contributions are formed draw by draw before posterior summaries.
-    """
+    """Respondent-level decomposition of the HCM event shift for one conjoint level."""
     check_model_coding(idata, conjoint_config)
     posterior = idata.posterior
     needed = ["eta_nhv", "eta_pd", "shift_mean", "shift_nh", "shift_psy", "shift_fin"]

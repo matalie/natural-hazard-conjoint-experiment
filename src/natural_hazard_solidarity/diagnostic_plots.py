@@ -1,9 +1,4 @@
-"""Posterior diagnostic figures migrated from the legacy notebooks.
-
-The plotting functions are independent of Snakemake and return Matplotlib
-figures. The workflow wrapper is responsible for reading NetCDF files and
-saving outputs.
-"""
+"""Posterior diagnostic figures"""
 from __future__ import annotations
 
 from textwrap import wrap
@@ -17,7 +12,7 @@ from .plotting import LEVEL_LABELS, LEVEL_ORDER
 from .posterior import check_model_coding
 
 def _trace_groups(conjoint_config):
-    """Return non-baseline level coordinates grouped like the legacy figure."""
+    """Return non-baseline level coordinates grouped"""
     titles = {
         "costs": "Costs",
         "exemptions": "Cost exemptions",

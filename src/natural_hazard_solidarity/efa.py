@@ -31,7 +31,7 @@ def complete_efa_items(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_correlation_matrix(attributes: pd.DataFrame):
-    """Legacy lower-triangle Pearson correlation matrix."""
+    """Lower-triangle Pearson correlation matrix."""
     correlation_matrix = attributes.corr()
     values = correlation_matrix.values.copy()
     mask = np.triu(np.ones_like(values, dtype=bool), k=1)
@@ -56,7 +56,7 @@ def plot_correlation_matrix(attributes: pd.DataFrame):
 
 
 def fit_efa(attributes: pd.DataFrame):
-    """Fit the legacy ML/oblimin 2- and 3-factor EFAs."""
+    """Fit the ML/oblimin 2- and 3-factor EFAs."""
     try:
         from factor_analyzer import FactorAnalyzer
         from factor_analyzer.factor_analyzer import calculate_kmo, calculate_bartlett_sphericity
@@ -97,7 +97,7 @@ def fit_efa(attributes: pd.DataFrame):
 
 
 def plot_efa_comparison(efa_results: dict):
-    """Legacy 2-vs-3 factor figure with physically square heatmap cells."""
+    """2-vs-3 factor figure with physically square heatmap cells."""
     cell = 0.5
     n_items = len(efa_results[2]["loadings"])
     n_fac_2, n_fac_3 = 2, 3

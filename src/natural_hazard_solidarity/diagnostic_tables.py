@@ -79,7 +79,6 @@ def main_model_summary(idata):
 
 def latent_loading_summary(idata):
     """Sampling diagnostics for NHV and psychological-distance loadings."""
-
     table = _summary(idata, ["loading_nhv", "loading_pd",],)
     labels = []
 

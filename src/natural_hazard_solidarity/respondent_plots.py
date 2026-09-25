@@ -24,7 +24,7 @@ def _financial_values(idata):
 
 
 def plot_latent_constructs(idata):
-    """Return the legacy eta_PD / eta_NHV / FV histogram figure."""
+    """Plot distribution of model parameters of latent constructs: eta_PD / eta_NHV / FV as histogram."""
     eta_pd = idata.posterior["eta_pd"].mean(("chain", "draw")).values
     eta_nhv = idata.posterior["eta_nhv"].mean(("chain", "draw")).values
     fv = _financial_values(idata)
@@ -53,10 +53,7 @@ def plot_latent_constructs(idata):
 
 
 def plot_level_decomposition_by_respondent(decomp_df, title=None):
-    """Return the legacy four-panel respondent-impact figure.
-
-    Each panel is sorted independently, as in the original notebook.
-    """
+    """Plot the utility shift and the contribution of the latent constructs per level and person."""
     subplot_titles = ["Perceived NHV", "Psychological distance", "Perceived FV", "Total shift"]
     ylabels = [
         r"$\delta_{eff,n}$ contribution",

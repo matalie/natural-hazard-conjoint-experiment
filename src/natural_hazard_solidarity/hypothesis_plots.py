@@ -31,15 +31,6 @@ def _levels_from_config(conjoint_config):
         for attr in ATTRIBUTE_ORDER
     }
 
-def _validate_level_order(levels_by_attr):
-    """Fail loudly if the conjoint design no longer matches the legacy figure order."""
-    for attr in ATTRIBUTE_ORDER:
-        if set(LEVEL_ORDER[attr]) != set(levels_by_attr[attr]):
-            raise ValueError(
-                f"Configured levels for '{attr}' do not match the legacy plotting order. "
-                "Update LEVEL_ORDER in plotting.py if the conjoint design changed."
-            )
-
 def _subplot_color_map(kinds):
     return {
         (attr, kind): ATTRIBUTE_COLORS[attr]
@@ -59,12 +50,12 @@ def _padded_xlim(plot_df, kinds, pad_fraction=0.05):
     return float(low - pad), float(high + pad)
 
 def plot_h1(idata, conjoint_config, plot_config=None):
-    """H1: population pre-event utility and average event-related utility shift."""
+    """H1: summarize population-average pre-event partworths, post-event
+    partworths, and average event-related shifts for all conjoint levels."""
     plot_config = plot_config or {}
     hdi_prob = float(plot_config.get("hdi_prob", 0.89))
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
-    _validate_level_order(levels_by_attr)
 
     pre_total_da = posterior["partworth_mean"]
     shift_total_da = posterior["shift_mean"]
@@ -130,10 +121,8 @@ def plot_h1(idata, conjoint_config, plot_config=None):
 def _build_h2(idata, conjoint_config, pd_sign=1.0, hdi_prob=0.89):
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
-    _validate_level_order(levels_by_attr)
 
-    # Legacy analyze_results.ipynb used pd_sign = +1.
-    # Use -1 only if the substantive definition of eta_pd is intentionally reversed.
+    # pd_sign: Use -1 only if the substantive definition of eta_pd is intentionally reversed.
     gamma_pd_da = float(pd_sign) * posterior["gamma_pd"]
     shift_psy_da = float(pd_sign) * posterior["shift_psy"]
     post_pd_da = gamma_pd_da + shift_psy_da
@@ -153,7 +142,8 @@ def _build_h2(idata, conjoint_config, pd_sign=1.0, hdi_prob=0.89):
 
 
 def plot_h2(idata, conjoint_config, plot_config=None):
-    """H2: psychological-distance associations before the event and with the shift."""
+    """H2: summarize the association of psychological distance with pre-event
+    partworth utility (gamma_PD) and with the event-related shift (phi_PD)."""
     plot_config = plot_config or {}
     pd_sign = float(plot_config.get("pd_sign", 1.0))
     hdi_prob = float(plot_config.get("hdi_prob", 0.89))
@@ -194,12 +184,12 @@ def plot_h2(idata, conjoint_config, plot_config=None):
 
 
 def plot_h3(idata, conjoint_config, plot_config=None):
-    """H3: financial-vulnerability association with the event-related utility shift."""
+    """H2: summarize the association of financial-vulnerability with pre-event
+    partworth utility (gamma_FV) and with the event-related shift (phi_FV)."""
     plot_config = plot_config or {}
     hdi_prob = float(plot_config.get("hdi_prob", 0.89))
     posterior = idata.posterior
     levels_by_attr = _levels_from_config(conjoint_config)
-    _validate_level_order(levels_by_attr)
 
     if "gamma_fv" not in posterior or "shift_fin" not in posterior:
         raise ValueError("H3 requires a main model fitted with financial vulnerability.")
@@ -218,9 +208,7 @@ def plot_h3(idata, conjoint_config, plot_config=None):
     )
     draws_map = {**fin_pre_draws, **fin_shift_draws, **fin_post_draws}
 
-    # The legacy notebook deliberately reused H2's x range for H3.
     _, _, h2_xlim = _build_h2(idata, conjoint_config, pd_sign=1.0, hdi_prob=hdi_prob)
-
     panels = [
         {
             "kinds": ["fin_pre"],
@@ -279,9 +267,7 @@ def make_regular_ticks(lo, hi, step=0.5):
 
 
 def _wrap_title(text, width=38):
-    return "\n".join(
-        textwrap.wrap(str(text), width=width, break_long_words=False)
-    )
+    return "\n".join(textwrap.wrap(str(text), width=width, break_long_words=False))
 
 
 def _resolve_h4_levels(plot_config, levels_by_attr):
@@ -377,7 +363,7 @@ def _plot_multi_level_heatmaps(
     max_levels = max(len(levels_h4[a]) for a in attrs)
     nrows = len(attrs)
     fig = plt.figure(figsize=(panel_width * max_levels + 1.6, panel_height * nrows + 0.6))
-    outer = fig.add_gridspec( nrows, 1, left=0.08, right=0.86, top=0.96, bottom=0.07, hspace=0.55,)
+    outer = fig.add_gridspec( nrows, 1, left=0.08, right=0.86, top=0.95, bottom=0.08, hspace=0.20,)
 
     image = None
     row_axes_map = {}
@@ -391,9 +377,9 @@ def _plot_multi_level_heatmaps(
         levels = levels_h4[attr]
         inner = outer[row, 0].subgridspec(
             3, len(levels),
-            height_ratios=[0.13, 0.24, 1.0],
-            hspace=0.03,
-            wspace=0.28,
+            height_ratios=[0.12, 0.32, 1.0],
+            hspace=0.05,
+            wspace=0.20,
         )
 
         # 1) Gruppentitel über der gesamten Attributgruppe
@@ -408,16 +394,12 @@ def _plot_multi_level_heatmaps(
         row_axes = []
 
         for col, level in enumerate(levels):
-            # 2) Leveltitel in eigener Achse
+            # title per level
             title_ax = fig.add_subplot(inner[1, col])
             title_ax.axis("off")
-            title_ax.text(
-                0.5, 0.5, _wrap_title(level, width=24),
-                ha="center", va="center",
-                fontsize=12, color="black",
-            )
+            title_ax.text(0.5, 0.5, _wrap_title(level, width=32), ha="center", va="center", fontsize=12, color="black",)
 
-            # 3) Heatmap darunter
+            # heatmap of the level
             ax = fig.add_subplot(inner[2, col])
             image = ax.imshow(
                 surfaces[(attr, level)],
@@ -468,7 +450,6 @@ def plot_h4(idata, conjoint_config, plot_config=None):
         raise ValueError("H4 requires 'fv_data' in idata.constant_data.")
 
     levels_by_attr = _levels_from_config(conjoint_config)
-    _validate_level_order(levels_by_attr)
     levels_h4 = _resolve_h4_levels(plot_config, levels_by_attr)
 
     eta_nhv_mean = posterior["eta_nhv"].mean(("chain", "draw")).values

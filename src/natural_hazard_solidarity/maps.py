@@ -1,8 +1,6 @@
 """Reusable geographic assignment and cantonal map logic.
 
-Migrated from ``analyze_respondents.ipynb`` and the previous Snakemake map
-script. This module contains no Snakemake path handling and performs no file
-I/O; the workflow wrapper loads and saves files.
+Geographic analysis of data.
 """
 from __future__ import annotations
 
@@ -196,7 +194,9 @@ def prepare_canton_geometry(source, cfg):
 
 
 def draw_canton_maps(geometry, summaries, spec, cfg):
-    """Draw legacy borders/hatching/Blatten marker with one scale across panels."""
+    """Plots geographic heatmaps (cantonwise) to depict model and survey results.
+    
+    Draw borders/hatching/Blatten marker with one scale across panels."""
     import geopandas as gpd
     from shapely.geometry import Point
 

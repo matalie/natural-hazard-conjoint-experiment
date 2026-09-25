@@ -1,5 +1,10 @@
-"""Survey mappings from legacy helpers/map_data.py; no import-time file IO."""
+"""Survey mappings"""
 import numpy as np
+
+# columns excluded from survey to anonymize
+ANONYMIZE_COLS = ['Status', 'IPAddress', 'RecipientLastName','RecipientFirstName', 'RecipientEmail'
+                , 'ExternalReference', 'LocationLatitude', 'LocationLongitude', 'consent_choice'
+                , 'DistributionChannel', 'UserLanguage', r'language$', 'RecordedDate', 'ResponseId']
 
 VALID_COLUMNS = [
     "sensitivity_nh_1", "sensitivity_nh_2", "sensitivity_nh_3", "sensitivity_nh_4",
@@ -15,6 +20,7 @@ VALID_COLUMNS = [
     "deservingness_11", "deservingness_12",        
 ]
 
+# needed
 NUM_COLUMNS = [
     "number_household_1_TEXT"
 ]
@@ -42,6 +48,10 @@ LIKERT_MAP = {
     "7": np.nan
 }
 
+# Conjoint experiment option preference
+PREFERENCE_MAP = {"Option 1": 1, "Option 2": 2}
+
+# excperience of loss/damage of property due to natural hazard question
 NH_EXPERIENCE_MAP = {
     'No': 1,
     'Yes, due to a different natural hazard such as': 0,
@@ -55,6 +65,7 @@ NH_EXPERIENCE_MAP = {
     'Yes, due to flooding,Yes, due to a debris flow,Yes, due to a landslide,Yes, due to a different natural hazard such as': 0,
 }
 
+# read articles about Blatten
 ARTICLES_MAP = {
     '1 - 5 items': 1, 
     '6 - 10 items': 2, 
@@ -65,7 +76,7 @@ ARTICLES_MAP = {
     'More than 30 items': 6, 
     np.nan: np.nan    
 }
-
+# number of conversations about Blatten
 CONVERSATIONS_MAP = {
     '1 - 3 conversations': 1, 
     '4 - 6 conversations': 2,
@@ -77,6 +88,14 @@ CONVERSATIONS_MAP = {
     'More than 22 conversations': 6,
     np.nan: np.nan
 }
+# money donation to Blatten affected community
+DONATIONS = [
+    "I have donated money to support people in Blatten.",
+    "I have donated money to another charity organization (not connected to Blatten).",
+    "I have volunteered my time to support people in Blatten.",
+    "I have volunteered my time to another charity organization (not connected to Blatten)."
+]
+
 
 DEMOGRAPHICS_DICT = {
     # gender
@@ -97,13 +116,7 @@ DEMOGRAPHICS_DICT = {
     "Doctoral or professional degree (e.g. PhD, MD, JD)": "University degree",
     "Prefer not to say": np.nan,
     # income
-    # TODO: what source?
-    # "Less than CHF 50,000": 45000,
-    # "CHF 50,000 - CHF 70,000": 60000,
-    # "CHF 70,000 - CHF 100,000": 85000,
-    # "CHF 100,001 - CHF 150,000": 125000,
-    # "CHF 150,001 - CHF 250,000": 200000,
-    # "More than CHF 250,000": 300000,
+    # TODO: could be changed based on further data
     "Less than CHF 50,000": "Low",  #"Low",
     "CHF 50,000 - CHF 70,000": "Low", # "Low",
     "CHF 70,000 - CHF 100,000": "Mid", #"Mid",
@@ -201,15 +214,3 @@ TRANSLATION_DICT = {
     "Comuni di grande valore culturale, ad esempio con edifici storici": "Culturally valuable municipalities e.g. with historic buildings",
 }
 
-ANONYMIZE_COLS = ['Status', 'IPAddress', 'RecipientLastName','RecipientFirstName', 'RecipientEmail'
-                , 'ExternalReference', 'LocationLatitude', 'LocationLongitude', 'consent_choice'
-                , 'DistributionChannel', 'UserLanguage', r'language$', 'RecordedDate', 'ResponseId']
-
-PREFERENCE_MAP = {"Option 1": 1, "Option 2": 2}
-
-DONATIONS = [
-    "I have donated money to support people in Blatten.",
-    "I have donated money to another charity organization (not connected to Blatten).",
-    "I have volunteered my time to support people in Blatten.",
-    "I have volunteered my time to another charity organization (not connected to Blatten)."
-]

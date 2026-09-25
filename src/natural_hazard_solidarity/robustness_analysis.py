@@ -68,8 +68,6 @@ def build_sample_audit(
     sample sizes happen to be similar.
     """
     rows = []
-    expected_n = specification.get("expected_n_respondents", {}) or {}
-    expected_tasks_cfg = specification.get("expected_n_tasks", {}) or {}
 
     for run_name in specification["runs"]:
         if run_name not in models:
@@ -160,15 +158,6 @@ def build_sample_audit(
                     )
             else:
                 problems.append("NetCDF has no verifiable task coordinate")
-
-        if run_name in expected_n and got_n != int(expected_n[run_name]):
-            problems.append(
-                f"respondents in NetCDF={got_n}, expected_n_respondents={int(expected_n[run_name])}"
-            )
-        if run_name in expected_tasks_cfg and got_tasks != int(expected_tasks_cfg[run_name]):
-            problems.append(
-                f"tasks in NetCDF={got_tasks}, expected_n_tasks={int(expected_tasks_cfg[run_name])}"
-            )
 
         rows.append(
             {
@@ -304,10 +293,7 @@ def plot_robustness(
     conjoint_config: Mapping,
     hdi_prob: float = 0.89,
 ):
-    """
-    Create a legacy-style pre/shift/post robustness overlay.
-    Returns ``(figure, summary_table)``. File writing belongs to the workflow wrapper.
-    """
+    """Plot pre/shift/post robustness overlay for different fitted model results to test sample robustness and model robustness."""
     run_names = list(specification["runs"])
     if len(run_names) > len(ROBUSTNESS_COLORS):
         raise ValueError("Not enough predefined robustness styles for the configured runs.")
