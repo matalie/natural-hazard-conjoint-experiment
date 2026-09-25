@@ -1,7 +1,7 @@
-"""Hypothesis-specific plotting logic for H1-H4.
+"""Create hypothesis-specific posterior summaries and figures for H1-H4.
 
-This module contains the scientific/posterior-to-figure logic only.
-It does not know about Snakemake paths or output files.
+The module translates posterior model quantities into the estimands, tables,
+and visualizations used for the main hypothesis analyses.
 """
 from __future__ import annotations
 

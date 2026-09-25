@@ -1,20 +1,11 @@
-"""Geographic analysis of model and survey data.
+"""Snakemake entry point for geographic assignment and canton maps.
 
-Thin Snakemake entry point for geographic assignment and canton maps."""
+Geographic analysis of model and survey data."""
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
-
-# import sys
-# SNAKEMAKE = globals().get("snakemake")
-# if SNAKEMAKE is not None:
-#     REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
-# else:
-#     REPO_ROOT = Path.cwd()
-
-# sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from natural_hazard_solidarity.maps import (
     assign_cantons,

@@ -1,8 +1,6 @@
 """Robustness-comparison plotting and validation.
 
-Scientific logic migrated from ``analyze_results.ipynb`` cells 56-76.
-The module is Snakemake-agnostic: callers provide already loaded InferenceData
-objects and, optionally, the conjoint frame used to validate robustness samples.
+
 """
 from __future__ import annotations
 
@@ -32,7 +30,6 @@ def _model_n_tasks(idata) -> int:
     return 0
 
 
-
 def _normalised_ids(values) -> tuple[str, ...]:
     return tuple(map(str, np.asarray(values).reshape(-1)))
 
@@ -59,13 +56,12 @@ def build_sample_audit(
     sample_configs: Mapping | None = None,
     conjoint_frame: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Verify that each robustness NetCDF contains the configured sample.
+    """Verify that each fitted robustness model uses the intended sample.
 
-    In addition to respondent/task counts, the audit compares the exact
-    respondent and task identifiers stored in the fitted NetCDF against the
-    sample reconstructed from the current conjoint parquet and config. This
-    catches stale or accidentally mis-filtered subsample fits even when their
-    sample sizes happen to be similar.
+    The audit compares both sample sizes and the exact respondent and conjoint-task
+    identifiers stored in each NetCDF (.nc) model file with the sample implied by the
+    current conjoint data and configuration. This detects outdated model files or
+    incorrectly filtered robustness samples even when the sample sizes are identical.
     """
     rows = []
 
@@ -259,11 +255,7 @@ def _summary_for_selected_levels(
     hdi_prob: float,
     recenter: bool,
 ):
-    """Summarize selected levels, optionally recentering within shown levels.
-
-    The recentering reproduces the approach from ``analyze_results.ipynb``
-    cells 74-76 for comparisons where one level is deliberately omitted.
-    """
+    """Summarize selected levels, optionally recentering within shown levels."""
     rows = []
     draws_map = {}
 

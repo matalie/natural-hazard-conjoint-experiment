@@ -1,5 +1,8 @@
-"""Survey data preparation inlcuding cleaning, item-wise imputation, choice design and sample filters.
+"""Prepare survey data for the analysis pipeline.
 
+Includes survey-wave cleaning, quality exclusions, value recoding,
+construct-item imputation, wave merging, conjoint reshaping and encoding,
+and robustness-sample filtering.
 """
 from __future__ import annotations
 import re
@@ -9,7 +12,7 @@ import pandas as pd
 from . import mappings as mp
 
 def _remove_bad_quality(df: pd.DataFrame) -> pd.DataFrame:
-    """Exclude respondents with bad finishing flags"""
+    """Exclude preview, unfinished, and survey-terminated responses."""
     required = ["DistributionChannel", "Finished", "Q_TerminateFlag"]
     missing = [c for c in required if c not in df]
     if missing:
@@ -39,6 +42,7 @@ def map_values(
     return out
 
 def _standardize_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize raw survey column names and coerce key identifier fields to numeric values."""
     out = df.copy().replace("", pd.NA)
     out.columns = out.columns.str.replace(".", "", regex=False)
     out.columns = out.columns.str.replace("\xa0", "", regex=False)
@@ -54,6 +58,7 @@ def _standardize_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def _duration_invalid_mask(df: pd.DataFrame, lower_quantile: float | None, upper_quantile: float | None,) -> pd.Series:
+    """Flag responses with missing or implausible completion times based on configured quantile cutoffs."""    
     if "duration" not in df.columns:
         raise KeyError("Missing survey duration column.")
 
@@ -121,7 +126,12 @@ def _drop_sensitive_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=columns, errors="ignore")
 
 def clean_wave(df: pd.DataFrame, wave: str, config: dict) -> pd.DataFrame:
-    """Clean one raw survey wave"""
+    """Clean and standardize one survey wave.
+
+    Applies survey-quality exclusions, recodes questionnaire responses,
+    reverse-codes financial vulnerability where required, removes sensitive
+    fields, and prefixes all retained columns with the survey-wave identifier.
+    """
     out = _standardize_raw_columns(df)
     out = _remove_bad_quality(out)
 
@@ -172,7 +182,12 @@ def merge_waves(
     keys: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
-    """Link cleaned S0 and S1 using the respondent-id mapping file."""
+    """Link cleaned survey waves using the external respondent mapping.
+
+    Only respondents successfully matched across both waves are retained.
+    The function creates a stable respondent identifier and applies shared
+    demographic and questionnaire-value mappings after merging.
+    """
     map_keys = config["mapping_keys"]
     wave_keys = config["wave_keys"]
     keys = keys.copy()
@@ -232,7 +247,13 @@ def merge_waves(
     return merged
 
 def add_acceptance_consistency(df: pd.DataFrame, max_inconsistent: int) -> pd.DataFrame:
-    """Reproduce the conjoint preference/acceptance consistency check from the notebook."""
+    """Compare conjoint choices with the acceptance ratings of both alternatives.
+
+    A task is considered consistent when the preferred alternative receives an
+    acceptance rating at least as high as the non-preferred alternative.
+    Respondents are flagged according to the configured maximum number of
+    inconsistent tasks.
+    """
     out = df.copy()
     preference_columns = [c for c in out.columns if c.endswith("_conjoint_prefer")]
     consistency_columns: list[str] = []
@@ -264,8 +285,6 @@ def add_acceptance_consistency(df: pd.DataFrame, max_inconsistent: int) -> pd.Da
 
     if consistency_columns:
         out["n_acceptance_inconsistent"] = (~out[consistency_columns]).sum(axis=1)
-        # The old notebook called this "all_acceptance_consistent" but allowed up to
-        # two inconsistent tasks. This threshold is now explicit in config.yaml.
         out["all_acceptance_consistent"] = out["n_acceptance_inconsistent"].le(max_inconsistent)
     else:
         out["n_acceptance_inconsistent"] = pd.NA
@@ -308,7 +327,12 @@ def filter_model_sample(df: pd.DataFrame, sample_config: dict) -> pd.DataFrame:
 
 
 def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6):
-    """Impute latent factor item values using remaining factor items if <= 1/3 ist missing"""
+    """Impute missing construct items from the respondent's observed items in the same wave.
+
+    Imputation is performed only when at least ``min_items`` valid responses are
+    available. Missing items are filled with the configured row-wise mean or
+    median, rounded to the Likert scale.
+    """
     columns = [prefix + item for item in items]
     if not 1 <= min_items <= len(columns):
         raise ValueError("min_items must be between 1 and the number of items.")
@@ -319,14 +343,17 @@ def _fill_within_wave(df, items, prefix, min_items, method="median", lo=1, hi=6)
     if method not in {"median", "mean"}:
         raise ValueError("Imputation method must be median or mean.")
     center = getattr(values, method)(axis=1)
-    center = np.floor(center + 0.5).clip(lo, hi)
+    center = np.floor(center + 0.5).clip(lo, hi) # Round the respondent-specific imputation value to the nearest valid Likert category.
     values.loc[eligible] = values.loc[eligible].T.fillna(center.loc[eligible]).T
     out[columns] = values
     return out
 
 
 def _fallback_between_waves(df, items, target, source, lo=1, hi=6):
-    """Fallback_fill: fill missing latent construct items of respondents between waves in case <= 1/3 is missing"""
+    """Fallback_fill: fill missing latent construct items of respondents between
+    waves in case <= 1/3 is missing.
+    If requested, a respondent-level audit table records retention and the
+    number of values filled at each imputation stage."""
     out = df.copy()
     for item in items:
         target_col, source_col = target + item, source + item
@@ -415,7 +442,12 @@ def validate_choice_tasks(df, left_option=1, right_option=2):
 
 
 def build_conjoint_long(df, config):
-    """Create conjoint dataframe"""
+    """Reshape respondent-level conjoint responses into model-ready long format.
+
+    Creates one row per alternative, combines attribute levels with the observed
+    choice, assigns stable task identifiers, attaches configured respondent
+    metadata, and validates the resulting two-alternative choice tasks.
+    """
     if df["respondent_id"].isna().any() or df["respondent_id"].duplicated().any():
         raise ValueError("One unique non-missing respondent_id per input row is required.")
     attribute_columns = df.filter(regex=r"^S\d+_choice\d+_(costs|benefits|exemptions)\d+$").columns.tolist()

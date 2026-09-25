@@ -1,4 +1,6 @@
-"""Snakemake adapter for fitting and saving one configured model."""
+"""Snakemake entry point for fitting and saving one configured model.
+
+    The models are stored in NetCDF files (.nc)"""
 from pathlib import Path
 from datetime import datetime, timezone
 import hashlib
@@ -8,8 +10,6 @@ import json
 import pandas as pd
 import xarray as xr
 
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.data_preparation import filter_model_sample
 from natural_hazard_solidarity.models import choice_signature, fit_model
 

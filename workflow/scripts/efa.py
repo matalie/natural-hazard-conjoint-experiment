@@ -1,11 +1,9 @@
-"""Reproduce the requested EFA and construct-correlation figures."""
+"""Snakemake entry point for EFA and construct-correlation figures of the latent construct items."""
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.efa import (
     complete_efa_items,
     fit_efa,

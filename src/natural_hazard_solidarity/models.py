@@ -1,11 +1,12 @@
-"""
-Main HCM and two smaller choice model baselines.
+"""Bayesian choice models and model-fitting utilities.
 
-For each parameter in the models the prior distribution is defined.
-Futher functions:
-- function to prepare the data fed to the models
-- function to train and run the models to get the posterier distribution
+This module prepares validated model inputs and defines the three choice-model
+families used in the analysis: a simple multinomial choice model, a longitudinal
+mixed-logit model, and the main hybrid choice model (HCM).
 
+The HCM combines latent natural-hazard vulnerability and psychological distance
+with observed financial vulnerability, respondent-level preference heterogeneity,
+and event-related changes in conjoint partworth utilities.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -28,7 +29,12 @@ def _standardize(values):
 
 
 def prepare_model_data(df, conjoint_config, constructs, *, include_constructs=True):
-    """Validated paired design, true IDs, and within-run z-standardization."""
+    """Prepare validated conjoint and respondent data for model estimation.
+
+    Pairs the two alternatives within each conjoint task, constructs the design
+    matrices and respondent indices, and standardizes configured respondent-level
+    constructs within the fitted sample.
+    """
     left_code, right_code = conjoint_config.get("left_option", 1), conjoint_config.get("right_option", 2)
     validate_choice_tasks(df, left_code, right_code)
     features = design_columns(conjoint_config)
@@ -62,6 +68,8 @@ def prepare_model_data(df, conjoint_config, constructs, *, include_constructs=Tr
         if not ordered.groupby("respondent_id")[columns].nunique(dropna=False).eq(1).all().all():
             raise ValueError("Construct values differ across rows of the same respondent.")
         respondents = ordered.drop_duplicates("respondent_id").set_index("respondent_id").loc[rids, columns]
+        
+        # Standardize construct measures within the fitted sample before model estimation.
         result["y_nhv_z"], nh_scale = _standardize(respondents[nh].to_numpy(float))
         result["y_pd_z"], pd_scale = _standardize(respondents[psy].to_numpy(float))
         result["fv_z"], fv_scale = _standardize(respondents[fv].to_numpy(float))
@@ -86,10 +94,12 @@ def choice_signature(data):
 
 
 
-# Definition of a simple choice model, which includes
-# the respondents choices measured in the the conjoint experiment
 def build_simple_choice_model(data) -> pm.Model:
-    """Test first simple model with parameters alpha (left bias) and a common partworth mean (utility of an option) without event shift."""
+    """Define a population-level conjoint choice model without longitudinal change.
+
+    Choice probabilities depend on a left-option intercept and population-level
+    partworth utilities for the conjoint attribute levels.
+    """    
     import pymc as pm
     coords = {"level": data["feature_names"], "task": data["task_ids"]}
     with pm.Model(coords=coords) as model:
@@ -103,11 +113,13 @@ def build_simple_choice_model(data) -> pm.Model:
     return model
 
 
-# Definition of the main hybrid choice model, which includes
-# a longitudinal factor (pre or post event)
-# investigating the relation between these factors and the respondents choices measured in the the conjoint experiment
 def build_longitudinal_mixed_logit(data) -> pm.Model:
-    """Test simple longitudinal choice model with alpha (left bias) and a partworth mean value as well as an individual partworth preference (utility of an option), and a common partworth shift (utility shift)."""
+    """Define a longitudinal mixed-logit conjoint model.
+
+    The model combines population-level partworths with respondent-specific
+    preference heterogeneity and a common event-related shift in partworth
+    utilities between the pre- and post-event observations.
+    """
     import pymc as pm
     coords = {"level": data["feature_names"], "task": data["task_ids"], "respondent": data["respondent_ids"]}
     with pm.Model(coords=coords) as model:
@@ -128,13 +140,20 @@ def build_longitudinal_mixed_logit(data) -> pm.Model:
         pm.Deterministic("partworth_post", beta + shift, dims="level")
     return model
 
-# Definition of the main hybrid choice model, which includes
-# 3 latent factors: Natural hazard vulnerability, financial vulnerability, and psychological distance
-# and a longitudinal factor (pre or post event)
-# investigating the relation between these factors and the respondents choices measured in the the conjoint experiment
+
 def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: bool) -> pm.Model:
+    """Define the main longitudinal hybrid choice model.
+
+    Natural-hazard vulnerability and psychological distance are estimated as
+    respondent-level latent constructs from standardized survey items. These
+    constructs, together with observed financial vulnerability, explain
+    heterogeneity in pre-event partworth utilities and in event-related utility
+    shifts. Additional respondent-specific random coefficients capture
+    unobserved preference heterogeneity.
+    """
     import pymc as pm
-    # prior_factor is used only for robustness runs to jointly tighten or widen the configured prior scales; prior_factor=1 reproduces the main model.
+    # Scale all prior standard deviations jointly for prior-sensitivity runs. 
+    # prior_factor=1 reproduces the priors of the main model.
     if not np.isfinite(prior_factor) or prior_factor <= 0:
         raise ValueError("prior_factor must be positive and finite.")
     coords = {
@@ -186,6 +205,7 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
                 dims="respondent",
             )
 
+        # Structural choice-model parameters
         alpha = pm.Normal("alpha", mu=0.0, sigma=0.6 * factor)
         partworth_mean = pm.Normal("partworth_mean", mu=0.0, sigma=0.6 * factor, dims="level")
         partworth_sd = pm.HalfNormal("partworth_sd", 1 * factor, dims="level")
@@ -219,6 +239,12 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
             shift = shift + shift_fin * fv_data[:, None]
 
         shift_individual = pm.Deterministic("shift_eff", shift, dims=("respondent", "level"),)
+        
+        # Choice model
+        # ------------
+        # Each task uses the respondent-specific pre-event partworths plus the
+        # event-related shift for post-event observations. The difference in utility
+        # between the two alternatives determines the probability of choosing the left option.
         task_partworth = (partworth_individual[respondent_index] + event[:, None] * shift_individual[respondent_index])
         utility_left = pm.math.sum(x_left * task_partworth, axis=1)
         utility_right = pm.math.sum(x_right * task_partworth, axis=1)
@@ -232,7 +258,11 @@ def build_hcm(data: dict, prior_factor: float, include_financial_vulnerability: 
 
 
 def fit_model(frame, run, sampling, conjoint_config, constructs, max_cores=1):
-    """Fit one configured model and return posterior data plus prepared model data."""
+    """Prepare the data, fit the configured model family, and return its posterior.
+
+    Sampling settings are taken from the workflow configuration. The fit is
+    rejected if post-tuning NUTS divergences are detected.
+    """
     import pymc as pm
 
     family = run.get("family", "hcm")

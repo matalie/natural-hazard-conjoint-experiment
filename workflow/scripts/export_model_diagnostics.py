@@ -1,4 +1,5 @@
-"""Export posterior parameter tables for the main model."""
+"""Snakemake entry point for generating the posterior 
+    parameter tables of the main model."""
 
 from pathlib import Path
 import arviz as az

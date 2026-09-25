@@ -1,6 +1,13 @@
-"""Posterior arithmetic only
-HDIs are shortest contiguous sample intervals
-Always form sums/group means DRAW BY DRAW before computing an interval.
+"""Posterior transformations and summaries for fitted conjoint models.
+
+Derived quantities are constructed draw by draw before posterior summaries or
+intervals are computed. This preserves posterior dependence when coefficients,
+respondent effects, or group means are combined.
+
+Intervals are sample-based shortest contiguous intervals (HDIs), rather than
+equal-tail credible intervals. The module also validates model coding,
+respondent alignment, and observation consistency before posterior quantities
+are combined or compared.
 """
 from __future__ import annotations
 import numpy as np
@@ -9,7 +16,10 @@ import xarray as xr
 
 
 def posterior_interval(draws, hdi_prob=0.89, center="mean"):
-    """Univariate mean/median and shortest sample interval, not equal-tail quantiles.
+    """Summarize posterior draws by their center and shortest contiguous HDI.
+
+    The interval is estimated directly from the ordered posterior draws and is
+    therefore not an equal-tail quantile interval.
     """
     if not 0 < hdi_prob < 1 or center not in {"mean", "median"}:
         raise ValueError("Use 0 < hdi_prob < 1 and center=mean or median.")
@@ -24,6 +34,7 @@ def posterior_interval(draws, hdi_prob=0.89, center="mean"):
 
 
 def summarize_draws(draws, hdi_prob=0.89):
+    """Return posterior mean and HDI bounds for a one-dimensional draw vector."""
     mean, low, high = posterior_interval(draws, hdi_prob)
     return {"mean": mean, "hdi_low": low, "hdi_high": high}
 
@@ -48,9 +59,13 @@ def check_model_coding(idata, conjoint_config):
 
 
 def get_level_da(da, attribute, level, conjoint_config):
-    """Return a level utility with chain/draw/optional respondent dimensions intact."""
-    # Dummy coding: the omitted baseline is fixed at zero.
-    # Effect coding: coefficients within an attribute sum to zero, so the omitted baseline is reconstructed as minus the sum of non-baseline levels.
+    """Return the posterior utility for one conjoint level.
+
+    For non-baseline levels, the stored coefficient is returned directly.
+    Under effect coding, the omitted baseline is reconstructed so that 
+    coefficients within the attribute sum to zero.
+    Under dummy coding, the baseline is fixed at zero.
+    """
     spec = conjoint_config["attributes"][attribute]
     coding = conjoint_config["coding"]
     if coding not in {"effect", "dummy"}:
@@ -75,7 +90,10 @@ def get_level_draws(da, attribute, level, conjoint_config):
 
 
 def build_level_summary_from_da(da, attr_order, levels_by_attr, conjoint_config, kind_label, hdi_prob=0.89):
-    """Summarize selected levels using the model's configured coding."""
+    """Summarize posterior utilities for selected conjoint levels.
+
+    Returns both a tidy summary table and the underlying posterior draws used
+    by downstream plots."""   
     rows, draw_map = [], {}
     for attr in attr_order:
         for level in levels_by_attr[attr]:
@@ -91,13 +109,14 @@ def build_level_summary_from_da(da, attr_order, levels_by_attr, conjoint_config,
     return pd.DataFrame(rows), draw_map
 
 
-"""Return pre-event utility, event-related shift, or post-event utility.
 
-Post-event utility is always constructed draw by draw as pre + shift.
-With individual=True, respondent-specific posterior quantities are returned;
-otherwise population-level coefficients are used.
-"""
 def quantity_da(idata, quantity, *, individual=False):
+    """Return pre-event utility, event-related shift, or post-event utility.
+
+    Post-event utility is always constructed draw by draw as pre + shift.
+    With individual=True, respondent-specific posterior quantities are returned;
+    otherwise population-level coefficients are used.
+    """
     post = idata.posterior
     if individual:
         pre = post["partworth_individual"]
@@ -122,7 +141,11 @@ def quantity_da(idata, quantity, *, individual=False):
 
 
 def align_respondents(idata, metadata):
-    """No positional guessing: old .nc files without verified IDs are rejected."""
+    """Align respondent metadata to the fitted model using verified identifiers.
+
+    Respondents are matched by stored respondent IDs and provenance keys,
+    never by row position. 
+    """
     if idata.posterior.attrs.get("id_scheme") != "respondent_id_v2" or not hasattr(idata, "run_data"):
         raise ValueError("This .nc lacks verified respondent IDs. Refit with v2 or validate an explicit legacy mapping first.")
     if metadata["respondent_id"].duplicated().any() or metadata["respondent_id"].isna().any():
@@ -138,7 +161,10 @@ def align_respondents(idata, metadata):
 
 
 def group_summary(da, metadata, group_column, hdi_prob=0.89):
-    """Group mean per posterior draw, then HDI; missing groups are excluded."""
+    """Summarize respondent-level posterior quantities by group.
+
+    Respondent values are averaged within each group separately for every
+    posterior draw. """
     if set(da.dims) != {"chain", "draw", "respondent"}:
         raise ValueError("Group summary expects one scalar per respondent/draw.")
     indexed = metadata.set_index("respondent_id").reindex(da.respondent.values)
@@ -152,6 +178,7 @@ def group_summary(da, metadata, group_column, hdi_prob=0.89):
 
 
 def individual_summary(da, hdi_prob=0.89):
+    """Return posterior mean and HDI separately for each respondent."""
     values = da.transpose("respondent", "chain", "draw").values.reshape(da.sizes["respondent"], -1)
     return pd.DataFrame([{ "respondent_id": rid, **summarize_draws(draws, hdi_prob)}
                          for rid, draws in zip(da.respondent.values, values)])
@@ -171,7 +198,13 @@ def validate_model_comparison(models):
 
 
 def compute_level_surface(idata, attr, level, conjoint_config, nhv_axis, fv_axis, quantity="shift", pd_fixed=0.0, hdi_prob=0.89):
-    """Used for hypothesis 4 plotting heatmaps"""
+    """Evaluate the posterior utility surface over NHV and financial vulnerability.
+
+    For one conjoint level, posterior utility is evaluated on every combination
+    of the supplied NHV and FV grid values while psychological distance is held
+    fixed. The returned matrices contain the posterior mean and HDI at each
+    grid point.
+    """
     post = idata.posterior
     needed = {"shift": ["shift_mean", "shift_nh", "shift_fin", "shift_psy"],
               "pre": ["partworth_mean", "gamma_nhv", "gamma_fv", "gamma_pd"]}
@@ -188,7 +221,7 @@ def compute_level_surface(idata, attr, level, conjoint_config, nhv_axis, fv_axis
 
 
 def _summarize_draw_matrix(matrix, prefix, hdi_prob=0.89):
-    """Vectorized respondent-wise posterior mean + shortest contiguous interval."""
+    """Summarize a respondent-by-draw matrix with respondent-specific means and HDIs."""
     values = np.asarray(matrix, dtype=float)
     if values.ndim != 2 or values.shape[1] < 2 or not np.isfinite(values).all():
         raise ValueError("Expected finite respondent x posterior-draw matrix.")
@@ -207,7 +240,12 @@ def _summarize_draw_matrix(matrix, prefix, hdi_prob=0.89):
 
 
 def level_shift_decomposition(idata, attribute, level, conjoint_config, hdi_prob=0.89):
-    """Respondent-level decomposition of the HCM event shift for one conjoint level."""
+    """Decompose each respondent's event-related utility shift for one level.
+
+    The total shift is separated draw by draw into the population-average shift
+    and respondent-specific contributions from natural-hazard vulnerability,
+    psychological distance, and financial vulnerability.
+    """
     check_model_coding(idata, conjoint_config)
     posterior = idata.posterior
     needed = ["eta_nhv", "eta_pd", "shift_mean", "shift_nh", "shift_psy", "shift_fin"]

@@ -1,8 +1,9 @@
+"""Create descriptive figures that summarize observed survey responses,
+distributions, and pre/post patterns before model-based inference."""
 from __future__ import annotations
 
 from math import ceil
 import textwrap
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -44,7 +45,7 @@ def paired_likert(df: pd.DataFrame, pre_col: str, post_col: str):
 
 
 def plot_pre_post_likert(df: pd.DataFrame, spec: dict):
-    """Reproduce the old S0/S1 Likert histograms for one construct group."""
+    """Plot S0/S1 (pre/post) Likert histograms for one construct group."""
     items = list(spec["items"])
     labels = dict(spec.get("labels", {}))
     k = len(items)
@@ -111,7 +112,7 @@ def plot_deservingness_likert(
     columns=DESERVINGNESS_COLUMNS,
     title_map=DESERVINGNESS_TITLES,
 ):
-    """Reproduce the old 3-column deservingness Likert panel."""
+    """Plot deservingness Likert panel for specified deservingness columns."""
     columns = list(columns)
     missing = [column for column in columns if column not in df.columns]
     if missing:

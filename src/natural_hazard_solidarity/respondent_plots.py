@@ -1,8 +1,5 @@
-"""Respondent-level figures migrated from ``analyze_respondents.ipynb``.
-
-This module contains plotting logic only. File I/O belongs to the Snakemake
-wrapper in ``workflow/scripts/plot_respondents.py``.
-"""
+"""Create respondent-level posterior plots showing individual variation in
+estimated conjoint utilities and event-related shifts."""
 from __future__ import annotations
 
 import matplotlib.pyplot as plt

@@ -1,19 +1,10 @@
-"""Thin Snakemake entry point for one H1-H4 hypothesis figure."""
+"""Snakemake entry point for one H1-H4 hypothesis figure."""
 
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 
 import arviz as az
-
-# import sys
-# SNAKEMAKE = globals().get("snakemake")
-# if SNAKEMAKE is not None:
-#     REPO_ROOT = Path(SNAKEMAKE.scriptdir).parents[1]
-# else:
-#     REPO_ROOT = Path.cwd()
-
-# sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from natural_hazard_solidarity.hypothesis_plots import plot_hypothesis
 from natural_hazard_solidarity.plotting import save_figure

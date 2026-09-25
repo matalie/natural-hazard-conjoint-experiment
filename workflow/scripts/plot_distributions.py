@@ -1,11 +1,10 @@
-"""Descriptive Likert figures. Scientific plotting logic lives in src/."""
+"""Snakemake entry point for descriptive Likert figures. 
+Scientific plotting logic lives in src/."""
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.descriptive_plots import (
     plot_deservingness_likert,
     plot_likert_shifts,

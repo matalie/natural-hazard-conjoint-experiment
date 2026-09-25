@@ -1,19 +1,20 @@
-"""Preprocessing of the survey data"""
+"""Snakemake entry point for doing the preprocessing steps of the survey data"""
 from pathlib import Path
 import json
 import hashlib
 import pandas as pd
 
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from natural_hazard_solidarity.data_preparation import (clean_wave, merge_waves, prepare_analysis_sample,
-                                                      build_conjoint_long, encode_conjoint)
-
+from natural_hazard_solidarity.data_preparation import (
+    clean_wave, 
+    merge_waves, 
+    prepare_analysis_sample,
+    build_conjoint_long, 
+    encode_conjoint
+)
 
 def save(frame, path):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path, index=False)
-
 
 def main(s):
     stage = s.params.stage

@@ -1,8 +1,8 @@
-"""LOO for identical observations only; not a ranking of different respondent subsamples."""
+"""Snakemake entry point for model complexity comparison (simple, longitudinal, and hybrid choice model)
+ 
+ Comparison with leave one out (LOO) for identical observations only not a ranking of different respondent subsamples."""
 from pathlib import Path
 import pandas as pd
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from natural_hazard_solidarity.posterior import validate_model_comparison
 
 

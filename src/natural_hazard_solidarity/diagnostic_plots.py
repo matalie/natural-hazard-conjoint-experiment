@@ -1,4 +1,5 @@
-"""Posterior diagnostic figures"""
+"""Create diagnostic plots for evaluating posterior sampling and the fitted
+Bayesian model."""
 from __future__ import annotations
 
 from textwrap import wrap

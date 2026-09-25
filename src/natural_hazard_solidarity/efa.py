@@ -1,4 +1,4 @@
-"""Exploratory factor-analysis and construct-correlation figures from latent_constructs.ipynb."""
+"""Exploratory factor-analysis and construct-correlation figures"""
 from __future__ import annotations
 
 import re
