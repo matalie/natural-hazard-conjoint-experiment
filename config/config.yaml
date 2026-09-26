@@ -28,7 +28,7 @@ sampling:
   draws: 1500                 # Retained posterior draws per chain after tuning (for the main run I used: 1500)
   tune: 1500                  # Warm-up/adaptation draws per chain, which are not retained (for the main run I used: 1500)
   chains: 4                   # Number of independent MCMC chains
-  cores: 2                    # Number of MCMC chains sampled concurrently (e.g. 4 chains + 2 cores = 2 chains at a time)
+  cores: 2                    # Number of MCMC chains sampled concurrently (usually as many as there are chains) (e.g. 4 chains + 2 cores = 2 chains at a time)
   blas_threads_per_chain: 1   # Numerical-library threads per chain (keep low to avoid oversubscription)
   random_seed: 123            # Random seed for reproducible initialization and MCMC sampling
   target_accept: 0.95         # NUTS target acceptance probability: higher values use smaller step sizes and can help reduce divergences, but increase runtime
